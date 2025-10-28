@@ -1,0 +1,13 @@
+{net_params['num_trade_indicators'] = 1
+net_params['hidden_dim'] = 4
+net_params['n_heads'] = 2
+net_params['out_dim'] = 1
+net_params['in_feat_dropout'] = 0.
+net_params['dropout'] = 0.0
+net_params['encL'] = 1
+net_params['decL'] = 1
+net_params['layer_norm'] = False
+net_params['batch_norm'] = False
+net_params['residual'] = True
+net_params['edge_feat'] = True
+net_params['pos_enc_dim'] = 4}

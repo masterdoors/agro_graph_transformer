@@ -1,0 +1,10 @@
+{'num_trade_indicators':1,
+'hidden_dim':4,
+'out_dim': 1,
+'in_feat_dropout':0.0,
+'dropout':0.05,
+'layer_norm': False
+'batch_norm': False
+'residual': True
+'edge_feat': True
+'pos_enc_dim': 4}
