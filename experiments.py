@@ -166,130 +166,130 @@ if __name__ == "__main__":
             with open('name_encoder' + args.imputation + '.pkl', 'rb') as f:
                 le = pickle.load(f)
         
-            # targs = []
-            # datas = []
+            targs = []
+            datas = []
             
-            # for c, y in cluster_year_train:
-            #     for j,k in cluster_year_train[c,y][1]:
-            #         targs += [cluster_year_train[c,y][1][j,k][1]]
-            #         datas += [cluster_year_train[c,y][1][j,k][0]]
+            for c, y in cluster_year_train:
+                for j,k in cluster_year_train[c,y][1]:
+                    targs += [cluster_year_train[c,y][1][j,k][1]]
+                    datas += [cluster_year_train[c,y][1][j,k][0]]
             
-            # Xtr = np.vstack(datas).reshape(-1,5,4)
-            # ytr = np.vstack(targs)
+            Xtr = np.vstack(datas).reshape(-1,5,4)
+            ytr = np.vstack(targs)
 
-            # targs = []
-            # datas = []            
+            targs = []
+            datas = []            
 
-            # for c, y in cluster_year_test:
-            #     for j,k in cluster_year_test[c,y][1]:
-            #         targs += [cluster_year_test[c,y][1][j,k][1]]
-            #         datas += [cluster_year_test[c,y][1][j,k][0]]
+            for c, y in cluster_year_test:
+                for j,k in cluster_year_test[c,y][1]:
+                    targs += [cluster_year_test[c,y][1][j,k][1]]
+                    datas += [cluster_year_test[c,y][1][j,k][0]]
             
-            # Xtest = np.vstack(datas).reshape(-1,5,4)
-            # ytest = np.vstack(targs)
+            Xtest = np.vstack(datas).reshape(-1,5,4)
+            ytest = np.vstack(targs)
             
-            # for _ in range(5):
-            #     X_train, ynn_train = resample(Xtr, ytr, n_samples=int(Xtr.shape[0]*0.7), replace=False)
-            #     X_test, ynn_test = resample(Xtest, ytest, n_samples=int(Xtest.shape[0]*0.7), replace=False)    
+            for _ in range(5):
+                X_train, ynn_train = resample(Xtr, ytr, n_samples=int(Xtr.shape[0]*0.7), replace=False)
+                X_test, ynn_test = resample(Xtest, ytest, n_samples=int(Xtest.shape[0]*0.7), replace=False)    
 
-            #     models = {"LSTM":make_modelLSTM, "GRU": make_GRU, "TKAN": make_modelTKAN}
-            #     #models = {"TKAN": make_modelTKAN}
+                models = {"LSTM":make_modelLSTM, "GRU": make_GRU, "TKAN": make_modelTKAN}
+                #models = {"TKAN": make_modelTKAN}
                 
-            #     for model_name in models:
-            #         if is_normed:
-            #             loss_types = ['beta','bce']
-            #         else:
-            #             loss_types = ['mae']
+                for model_name in models:
+                    if is_normed:
+                        loss_types = ['beta','bce']
+                    else:
+                        loss_types = ['mae']
                         
-            #         for loss_type in loss_types:
-            #             make_model = models[model_name]
-            #             batch_size = 64       
+                    for loss_type in loss_types:
+                        make_model = models[model_name]
+                        batch_size = 64       
                     
-            #             def objective(trial):
-            #                 lr = trial.suggest_float('lr', 0.00001, 0.01)
-            #                 hidden_size = trial.suggest_int('hs', 2, 32)
+                        def objective(trial):
+                            lr = trial.suggest_float('lr', 0.00001, 0.01)
+                            hidden_size = trial.suggest_int('hs', 2, 32)
                     
-            #                 if model_name == "TKAN":
-            #                     do = trial.suggest_float('dropout', 1e-5, 1e-2)
-            #                     #ep = 50
-            #                     ep = 5 
-            #                 else:    
-            #                     do = trial.suggest_float('dropout', 0.05, 0.2)
-            #                     #ep = 1000
-            #                     ep = 5
+                            if model_name == "TKAN":
+                                do = trial.suggest_float('dropout', 1e-5, 1e-2)
+                                ep = 50
+                                #ep = 5 
+                            else:    
+                                do = trial.suggest_float('dropout', 0.05, 0.2)
+                                ep = 1000
+                                #ep = 5
                                 
-            #                 kf = KFold(n_splits=3)
-            #                 scores = []
-            #                 for _, (train_index, test_index) in enumerate(kf.split(X_train)):
-            #                     if loss_type == "beta":
-            #                         outp_size = 2
-            #                     else:
-            #                         outp_size = 1
+                            kf = KFold(n_splits=3)
+                            scores = []
+                            for _, (train_index, test_index) in enumerate(kf.split(X_train)):
+                                if loss_type == "beta":
+                                    outp_size = 2
+                                else:
+                                    outp_size = 1
                                     
-            #                     model = make_model(input_shape=X_train.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
-            #                     model.to(device)
-            #                     fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device) 
-            #                     #impute data if necessary
-            #                     X_train_imp = X_train[train_index]
-            #                     X_test_imp = X_train[test_index]
-            #                     ynn_train_imp = ynn_train[train_index]
-            #                     ynn_test_imp =  ynn_train[test_index]
+                                model = make_model(input_shape=X_train.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
+                                model.to(device)
+                                fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device) 
+                                #impute data if necessary
+                                X_train_imp = X_train[train_index]
+                                X_test_imp = X_train[test_index]
+                                ynn_train_imp = ynn_train[train_index]
+                                ynn_test_imp =  ynn_train[test_index]
                                 
-            #                     if args.imputation == "NO_IMP":
-            #                             X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
+                                if args.imputation == "NO_IMP":
+                                        X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
     
-            #                     fitter.fit(X_train_imp,ynn_train_imp)
+                                fitter.fit(X_train_imp,ynn_train_imp)
     
-            #                     try:
-            #                         y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
-            #                         scores.append(mean_squared_error(ynn_test_imp.flatten(),y_pred.flatten()))
-            #                     except Exception as e:
-            #                         print(e)
-            #                         scores.append(1e26)
-            #                     del model    
-            #                 return np.asarray(scores).mean() 
+                                try:
+                                    y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
+                                    scores.append(mean_squared_error(ynn_test_imp.flatten(),y_pred.flatten()))
+                                except Exception as e:
+                                    print(e)
+                                    scores.append(1e26)
+                                del model    
+                            return np.asarray(scores).mean() 
                             
-            #             study = optuna.create_study(direction='minimize')
-            #             #study.optimize(objective, n_trials=50)    
-            #             study.optimize(objective, n_trials=5)
+                        study = optuna.create_study(direction='minimize')
+                        #study.optimize(objective, n_trials=50)    
+                        study.optimize(objective, n_trials=5)
                         
-            #             lr = study.best_trial.params["lr"]     
-            #             hs = study.best_trial.params["hs"]     
-            #             do = study.best_trial.params["dropout"]   
+                        lr = study.best_trial.params["lr"]     
+                        hs = study.best_trial.params["hs"]     
+                        do = study.best_trial.params["dropout"]   
 
-            #             ep = 5
-            #             if model_name == "TKAN":
-            #                 #ep = 50
-            #                 ep = 5 
-            #             else:    
-            #                 #ep = 1000
-            #                 ep = 5         
+                        ep = 5
+                        if model_name == "TKAN":
+                            ep = 50
+                            #ep = 5 
+                        else:    
+                            ep = 1000
+                            #ep = 5         
 
-            #             if loss_type == "beta":
-            #                 outp_size = 2
-            #             else:
-            #                 outp_size = 1                                           
+                        if loss_type == "beta":
+                            outp_size = 2
+                        else:
+                            outp_size = 1                                           
                     
-            #             model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
-            #             fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device)  
+                        model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
+                        fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device)  
                        
-            #             X_train_imp = X_train
-            #             X_test_imp = X_test
-            #             ynn_train_imp = ynn_train
-            #             if args.imputation == "NO_IMP":
-            #                 X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
+                        X_train_imp = X_train
+                        X_test_imp = X_test
+                        ynn_train_imp = ynn_train
+                        if args.imputation == "NO_IMP":
+                            X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
                         
-            #             fitter.fit(X_train_imp,ynn_train_imp) 
-            #             try:
-            #                 y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
-            #                 mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-            #                 mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-            #                 r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-            #                 printf(model_name,mse_score, mae_score, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
-            #                 #nn_data.append([model_name,mse_score, mae_score])
-            #             except Exception as e:
-            #                 print(e)
-            #             del model
+                        fitter.fit(X_train_imp,ynn_train_imp) 
+                        try:
+                            y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
+                            mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                            mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                            r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
+                            printf(model_name,mse_score, mae_score, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
+                            #nn_data.append([model_name,mse_score, mae_score])
+                        except Exception as e:
+                            print(e)
+                        del model
             
             
             # Transformer regressor
@@ -311,8 +311,8 @@ if __name__ == "__main__":
                                 lap_pos_enc = True
                                 wl_pos_enc = True
                                 batch_size = 8
-                                #epochs = 1000
-                                epochs = 5
+                                epochs = 1000
+                                #epochs = 5
                                 
                                 root_log_dir = ""
                                 root_ckpt_dir = "checkpoints_encoder"
@@ -375,7 +375,7 @@ if __name__ == "__main__":
                                     dataset_test_._add_wl_positional_encodings()
                                     print('Time WL PE:',time.time()-st)
                                     
-                                for _ in range(1):
+                                for _ in range(5):
                                     tst_idxs = np.random.choice(list(range(len(dataset_test_))), size=int(len(dataset_test_)*0.7), replace=False)
                                     tr_idxs = np.random.choice(list(range(len(dataset_train_))), size=int(len(dataset_train_)*0.7), replace=False)
                                     dataset_train = Subset(dataset_train_,tr_idxs)
@@ -416,8 +416,8 @@ if __name__ == "__main__":
                                         lap_pos_enc = True
                                         wl_pos_enc = True
                                         batch_size = 8
-                                        #epochs = 3000
-                                        epochs = 5
+                                        epochs = 3000
+                                        #epochs = 5
                                         
                                         write_file_name = ""
                                         write_config_file = ""
@@ -478,7 +478,7 @@ if __name__ == "__main__":
                                             dataset_test_._add_wl_positional_encodings()
                                             print('Time WL PE:',time.time()-st)                                        
 
-                                        for _ in range(1):
+                                        for _ in range(5):
                                             tst_idxs = np.random.choice(list(range(len(dataset_test_))), size=int(len(dataset_test_)*0.7), replace=False)
                                             tr_idxs = np.random.choice(list(range(len(dataset_train_))), size=int(len(dataset_train_)*0.7), replace=False)
                                             dataset_train = Subset(dataset_train_,tr_idxs)
