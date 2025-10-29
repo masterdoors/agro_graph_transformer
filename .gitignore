@@ -2,6 +2,10 @@
 __pycache__/
 *.py[codz]
 *$py.class
+checkpoints/
+checkpoints_encoder/
+checkpoints_encoder_decoder/
+rnn_base/
 
 # C extensions
 *.so
