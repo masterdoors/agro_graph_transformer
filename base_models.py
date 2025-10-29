@@ -9,89 +9,73 @@ from torch.nn import L1Loss
 from pytorch_forecasting.metrics.distributions import BetaDistributionLoss
 import uuid
 import os
+import torch.nn.functional as F
 
-class LSTMModel(nn.Module):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0.):
-        super(LSTMModel, self).__init__()
-        self.hidden_size  = hidden_size
+class RNNModel(nn.Module):
+    def __init__(self,rnn_layer, hidden_size,output_size, drop = 0., scaled = True, beta = False,dtype=torch.float64):
+        super(RNNModel, self).__init__()
+
         self.num_layers = 1
-        self.lstm = torch.nn.LSTM(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64) 
-        self.fc1 = nn.Linear(hidden_size, output_size,dtype=torch.float64)
+        self.rnn = rnn_layer 
+        self.fc1 = nn.Linear(hidden_size, output_size,dtype=dtype)
+        self.beta = beta
+        self.scaled = scaled
+        if beta:
+            self.fc2 = nn.Linear(hidden_size, output_size,dtype=dtype)
         self.drop = nn.Dropout(p=drop)
 
     def forward(self, x, hidden = None):
         if hidden is not None:
-            out,_ = self.gru(x,  hidden[:,0])
+            out,_ = self.rnn(x,  hidden[:,0])
             hidden[:] = out
         else:
-            out,_ = self.lstm(x, None)    
+            out = self.rnn(x, None)    
+        if isinstance(out,tuple):
+            out = out[0]    
         out = self.drop(out) 
         out = torch.squeeze(out)
-        out = out.reshape(out.shape[0]*out.shape[1], -1)
-        out = self.fc1(out)
-        return out.reshape(x.shape[0],x.shape[1])
+        out_ = out.reshape(out.shape[0]*out.shape[1], -1)
+        out = self.fc1(out_)
+        if self.scaled:
+            out = F.sigmoid(out)
+        if self.beta:
+            out2 = F.relu(self.fc2(out_)) + 0.0001
+            return torch.hstack([out, out2])
+        else:    
+            return out
 
-class GRUModel(nn.Module):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0.):
-        super(GRUModel, self).__init__()
-        self.hidden_size  = hidden_size
-        self.num_layers = 1
-        self.gru = torch.nn.GRU(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64) 
-        self.fc1 = nn.Linear(hidden_size, output_size,dtype=torch.float64)
-        self.drop = nn.Dropout(p=drop)        
+class LSTMModel(RNNModel):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+        lstm = torch.nn.LSTM(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64)
+        super(LSTMModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta)
 
-    def forward(self, x, hidden = None):
-        if hidden is not None:
-            out,_ = self.gru(x,  hidden[:,0])
-            hidden[:] = out
-        else:
-            out,_ = self.gru(x, None)    
-            
-        out = self.drop(out) 
-        out = torch.squeeze(out)
-        out = out.reshape(out.shape[0]*out.shape[1], -1)
-        out = self.fc1(out)
-        return out.reshape(x.shape[0],x.shape[1])
+class GRUModel(RNNModel):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+        lstm = torch.nn.GRU(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64)
+        super(GRUModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta)
 
-class TKANModel(nn.Module):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0.):
-        super(TKANModel, self).__init__()
-        self.hidden_size  = hidden_size
-        self.num_layers = 1
-        self.tkan = tKANLSTM(
+class TKANModel(RNNModel):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+        tkan = tKANLSTM(
             input_dim=input_size,
             hidden_dim=hidden_size,
             return_sequences=True,
             bidirectional=False,
             kan_type='fourier',
-            sub_kan_configs={'gridsize': 50, 'addbias': True},dtype=torch.float64)
-        self.fc1 = nn.Linear(hidden_size, output_size,dtype=torch.float64)
-        self.drop = nn.Dropout(p=drop)        
+            sub_kan_configs={'gridsize': 50, 'addbias': True})
+        super(TKANModel, self).__init__(tkan,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta,dtype=torch.float32)
 
-    def forward(self, x, hidden = None):
-        if hidden is not None:
-            out,_ = self.gru(x,  hidden[:,0])
-            hidden[:] = out
-        else:
-            out,_ = self.tkan(x, None)    
-            
-        out = self.drop(out) 
-        out = torch.squeeze(out)
-        out = out.reshape(out.shape[0]*out.shape[1], -1)
-        out = self.fc1(out)
-        return out.reshape(x.shape[0],x.shape[1])
-
-def make_modelLSTM(input_shape, hidden_size, output_size, dropout):
-    return LSTMModel(input_shape, hidden_size,output_size, dropout)
+def make_modelLSTM(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
+    return LSTMModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
  
-def make_GRU(input_shape, hidden_size, output_size, dropout):
-    return GRUModel(input_shape, hidden_size,output_size, dropout)
+def make_GRU(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
+    return GRUModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
 
-def make_modelTKAN(input_shape, hidden_size, output_size, dropout):
-    return TKANModel(input_shape, hidden_size,output_size, dropout)
+def make_modelTKAN(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
+    return TKANModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
 
 class RNNFitter:
-    def __init__(self,model,batch_size,ep,loss_type, device):
+    def __init__(self,model,batch_size,ep,loss_type, lr,device):
         self.model = model
         self.batch_size = batch_size
         self.ep = ep
@@ -101,10 +85,13 @@ class RNNFitter:
         ckpt_dir = os.path.join(self.root_ckpt_dir, "RUN_")
         os.makedirs(ckpt_dir, exist_ok=True)
         self.device = device
+        self.lr = lr
         torch.save(self.model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_))        
 
     def predict(self,X):
-        self.model(torch.from_numpy(X).to(self.device)).reshape(X.shape[0],-1)[:,0]
+        if isinstance(self.model,TKANModel):
+            X = X.astype(np.float32)
+        return self.model(torch.from_numpy(X).to(self.device)).reshape(X.shape[0],X.shape[1],-1)[:,:,0].detach().numpy()
 
     def fit(self,X,y):   
         ckpt_dir = os.path.join(self.root_ckpt_dir, "RUN_")
@@ -115,8 +102,12 @@ class RNNFitter:
             criterion = L1Loss()
         else:    
             criterion = BCELoss()
+
+        if isinstance(self.model,TKANModel):
+            X = X.astype(np.float32)
+            y = y.astype(np.float32)            
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001, weight_decay=0.01)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=0.01)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                          factor=0.1,
                                                          patience=5,
@@ -134,7 +125,7 @@ class RNNFitter:
                 
                 out  = self.model(X_batch)
         
-                loss = criterion(out, y_batch)
+                loss = criterion(out, y_batch.reshape(-1,1))
                 eloss += loss.item()
                 optimizer.zero_grad()
                 loss.backward()
@@ -143,7 +134,7 @@ class RNNFitter:
         
             with torch.no_grad():
                 out = self.model(torch.from_numpy(X).to(self.device))
-                lss = criterion(out, torch.from_numpy(y).to(self.device))
+                lss = criterion(out, torch.from_numpy(y).to(self.device).reshape(-1,1))
                 if lss < best_loss:
                     best_loss = lss
                     best_model = copy.deepcopy(self.model)

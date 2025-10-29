@@ -3,8 +3,8 @@
 "out_dim" : 1,
 "in_feat_dropout" : 0,
 "dropout" : 0.0,
-"layer_norm" : False,
-"batch_norm" : False,
-"residual" : True,
-"edge_feat" : True,
+"layer_norm" : false,
+"batch_norm" : false,
+"residual" : true,
+"edge_feat" : true,
 "pos_enc_dim" : 4}

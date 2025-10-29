@@ -39,6 +39,7 @@ class TransformerFitter:
         self.id_ = str(uuid.uuid4())
         self.root_ckpt_dir = root_ckpt_dir
         ckpt_dir = os.path.join(root_ckpt_dir, "RUN_")
+        os.makedirs(ckpt_dir, exist_ok=True)
         torch.save(self.model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_))
 
     def predict(self,testset, collate_fn):
@@ -59,7 +60,7 @@ class TransformerFitter:
         
         train_loader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn)
         val_loader = DataLoader(valset, batch_size=self.batch_size, shuffle=False, collate_fn=collate_fn)
-        min_loss = 100
+        min_loss = 1e61
         min_val = 0
         min_name = ""    
         try:
@@ -121,7 +122,7 @@ class MLPReadout(nn.Module):
         self.beta = beta
         if self.beta:
             self.rel = nn.ReLU()
-            self.blayer = nn.Linear( input_dim , output_dim , bias=True,dtype=torch.double)
+            self.blayer = nn.Linear( output_dim , output_dim , bias=True,dtype=torch.double)
         self.drop = nn.Dropout(p=0.05)
         
     def forward(self, x):
@@ -136,9 +137,9 @@ class MLPReadout(nn.Module):
             y2 = self.blayer(y)
             y2 = self.rel(y2) + 0.0001
             if self.fft:
-                return torch.hstack([y.reshape(-1,1),y2.reshape(-1,1)])
+                return torch.vstack([y.reshape(1,-1),y2.reshape(1,-1)])
             else:    
-                return torch.hstack([self.tn(y).reshape(-1,1),y2.reshape(-1,1)])            
+                return torch.vstack([torch.clip(self.tn(y).reshape(1,-1),min=0.0000001,max=0.99999999),y2.reshape(1,-1)])            
         else:
             if self.fft:
                 return y
@@ -208,7 +209,10 @@ class GraphTransformerNet(nn.Module):
         
     def forward(self, g, h, e, h_lap_pos_enc=None, h_wl_pos_enc=None):
         # input embedding
-        h = self.embedding_h(h[:,self.hidden_dim:],h[:,:self.hidden_dim])
+        if self.is_recurrent: 
+            h = self.embedding_h(h[:,self.hidden_dim:],h[:,:self.hidden_dim])
+        else:
+            h = self.embedding_h(h)    
         #h = self.in_feat_dropout(h)
         if self.lap_pos_enc:
             h_lap_pos_enc = self.embedding_lap_pos_enc(h_lap_pos_enc.double()) 
@@ -218,7 +222,10 @@ class GraphTransformerNet(nn.Module):
             h = h + h_wl_pos_enc
 
         #if not self.fft:
-        e = self.embedding_e(e[:,self.hidden_dim:],e[:,:self.hidden_dim])  
+        if self.is_recurrent:
+            e = self.embedding_e(e[:,self.hidden_dim:],e[:,:self.hidden_dim])  
+        else:
+            e = self.embedding_e(e)      
         #else:    
         #    e = self.embedding_e(torch.fft.fft(e[:,self.hidden_dim:]),e[:,:self.hidden_dim])  
         
@@ -277,12 +284,16 @@ class EncoderTrainer:
                 batch_graphs = batch_graphs.to(device)
                 batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)  # num x feat
                 batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
-                if t > 0:
-                    batch_e = torch.hstack([batch_scores, batch_e])
-                    batch_x = torch.hstack([batch_vert_scores, batch_x_])                
+                
+                if model.is_recurrent:
+                    if t > 0:
+                        batch_e = torch.hstack([batch_scores, batch_e])
+                        batch_x = torch.hstack([batch_vert_scores, batch_x_])                
+                    else:
+                        batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim)), batch_e])
+                        batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim)), batch_x_])         
                 else:
-                    batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim)), batch_e])
-                    batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim)), batch_x_])                
+                    batch_x = batch_x_               
                     
                 batch_targets = batch_targets.edata['feat'].reshape(1,-1)
                 #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
@@ -315,7 +326,7 @@ class EncoderTrainer:
     
             if model.fft:
                 if model.beta:
-                    ten = torch.vstack(model.MLP_layer.tn(ten[0]),ten[1])
+                    ten = torch.vstack([torch.clip(model.MLP_layer.tn(ten[0]),min=0.0000001,max=0.9999999),ten[1]])
                 else:    
                     ten = model.MLP_layer.tn(ten)
             
@@ -351,13 +362,16 @@ class EncoderTrainer:
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
                     
-                    if t > 0:
-                        batch_e = torch.hstack([batch_scores, batch_e])
-                        batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                    if model.is_recurrent:
+                        if t > 0:
+                            batch_e = torch.hstack([batch_scores, batch_e])
+                            batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                        else:
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
                     else:
-                        batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                        batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
-                    
+                        batch_x = batch_x_                           
+                     
                     batch_targets = batch_targets.edata['feat'].reshape(1,-1)
                     #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
                     #batch_targets = torch.hstack([batch_targets,ez])
@@ -384,7 +398,7 @@ class EncoderTrainer:
                 ten = torch.nan_to_num(torch.hstack(batch_res).real,nan=0., posinf=1 - model.eps,neginf=model.eps)
                 if model.fft:
                     if model.beta:
-                        ten = torch.vstack(model.MLP_layer.tn(ten[0]),ten[1])
+                        ten = torch.vstack([torch.clip(model.MLP_layer.tn(ten[0]),min=0.0000001,max=0.999999999),ten[1]])
                     else:    
                         ten = model.MLP_layer.tn(ten)
                 
@@ -405,6 +419,7 @@ class EncoderTrainer:
         nb_data = 0
         batch_res = []
         batch_tar = []
+        labeled_pred = []
         with torch.no_grad():
             for iter, (batch_graphs_, batch_targets_) in enumerate(data_loader):
                 batch_scores = None
@@ -417,12 +432,15 @@ class EncoderTrainer:
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
                     
-                    if t > 0:
-                        batch_e = torch.hstack([batch_scores, batch_e])
-                        batch_x = torch.hstack([batch_vert_scores, batch_x_])
+                    if model.is_recurrent:
+                        if t > 0:
+                            batch_e = torch.hstack([batch_scores, batch_e])
+                            batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                        else:
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
                     else:
-                        batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                        batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
+                        batch_x = batch_x_   
                     
                     batch_targets = batch_targets.edata['feat'].reshape(1,-1)
                     #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
@@ -442,28 +460,40 @@ class EncoderTrainer:
     
                     bx = batch_x_[batch_graphs.edges("all")[0]]
                     #be.append(torch.hstack([batch_e, bx]))
-                    be = torch.hstack([batch_e, bx])                
-                        
+                    be = torch.hstack([batch_e, bx])      
+
+                    invals =  batch_graphs.edges("all")[0]
+                    outvals = batch_graphs.edges("all")[1]    
+
                     batch_res_, batch_scores, batch_vert_scores = model.forward(batch_graphs, batch_x, batch_e, batch_lap_pos_enc, batch_wl_pos_enc)
-                    batch_res.append(batch_res_)
+
+                    if model.fft:
+                        if model.beta:
+                            batch_res_ = model.MLP_layer.tn(batch_res_)
+                        else:    
+                            batch_res_ = model.MLP_layer.tn(batch_res_)    
+
+                    labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                    batch_res.append(batch_res_[0])
                     batch_tar.append(batch_targets.flatten())    
                     
         ynn_test = torch.hstack(batch_tar).detach().cpu().numpy()
         y_pred = torch.hstack(batch_res).detach().cpu().real
         
-        if model.fft:
-            if model.beta:
-                y_pred = model.MLP_layer.tn(y_pred[0]).flatten()
-            else:    
-                y_pred = model.MLP_layer.tn(y_pred).flatten()
-    
-        y_pred = y_pred.numpy()
+
+
+        y_pred = torch.nan_to_num(y_pred,nan=0.,posinf=0.,neginf=0.).numpy()
     
         #print(ynn_test[:30], y_pred[:30])
-        mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
-        mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+        if model.scaled:
+            mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+        else:
+            mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+            mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+
         r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-        return mse_score,mae_score,r2_,ynn_test.flatten() - y_pred.flatten() 
+        return mse_score,mae_score,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
 
 def laplacian_positional_encoding(g, pos_enc_dim):
     """

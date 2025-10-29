@@ -85,7 +85,11 @@ class GraphTransformerNetDec(nn.Module):
         
     def forward(self, g1, h1, e1, g2, h2, e2, mask, h_lap_pos_enc=None, h_wl_pos_enc=None):
         # input embedding
-        h1 = self.embedding_h(h1[:,self.hidden_dim:],h1[:,:self.hidden_dim])
+        if self.is_recurrent: 
+            h1 = self.embedding_h(h1[:,self.hidden_dim:],h1[:,:self.hidden_dim])
+        else:
+            h1 = self.embedding_h(h1)    
+
         h2 = self.embedding_h_dec(h2)
         #h = self.in_feat_dropout(h)
         if self.lap_pos_enc:
@@ -99,12 +103,13 @@ class GraphTransformerNetDec(nn.Module):
 
         #print("e2:",e2)
             
-        if not self.fft:
+        if self.is_recurrent: 
             e1 = self.embedding_e(e1[:,self.hidden_dim:],e1[:,:self.hidden_dim])  
-            e2 = self.embedding_e_dec(e2)              
-        else:    
-            e1 = self.embedding_e(torch.fft.fft(e1[:,self.hidden_dim:]),e1[:,:self.hidden_dim])  
-            e2 = self.embedding_e_dec(torch.fft.fft(e2))  
+        else:
+            e1 = self.embedding_e(e1)  
+
+        e2 = self.embedding_e_dec(e2)              
+
         #print("h: ", h.shape)
         #print("e22: ", e2)
         
@@ -176,14 +181,17 @@ class EncoderDecoderTrainer:
                 batch_graphs = batch_graphs.to(device)
                 batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)  # num x feat
                 batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
-                if t > 0:
-                    batch_e = torch.hstack([batch_scores, batch_e])
-                    batch_x = torch.hstack([batch_vert_scores, batch_x_])                
+
+                if model.is_recurrent:
+                    if t > 0:
+                        batch_e = torch.hstack([batch_scores, batch_e])
+                        batch_x = torch.hstack([batch_vert_scores, batch_x_])                
+                    else:
+                        batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim)), batch_e])
+                        batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim)), batch_x_])         
                 else:
-                    batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim)), batch_e])
-                    batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim)), batch_x_])                
+                    batch_x = batch_x_                
                     
-                
                 batch_targets_n = batch_targets_n_[t]
                 batch_targets_n = batch_targets_n.to(device)
                 batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
@@ -220,31 +228,33 @@ class EncoderDecoderTrainer:
             ten = torch.nan_to_num(torch.hstack(batch_res).real,nan=0., posinf=1 - model.eps,neginf=model.eps)
             if model.fft:
                 if model.beta:
-                    ten = torch.vstack(model.MLP_layer.tn(ten[0]),ten[1])
+                    ten = torch.vstack([model.MLP_layer.tn(ten[0]),ten[1]])
                 else:    
                     ten = model.MLP_layer.tn(ten)
             
             loss_mask = torch.hstack(loss_mask)     
             doubled_mask = None
             if model.beta:
-                doubled_mask = loss_mask.repeat(2)
-                masked_ten = ten.masked_fill(~doubled_mask,0.)
-                masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.).reshape(-1,1)
-            else:    
-                masked_ten = ten.masked_fill(~loss_mask,0.)
-                masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.)
+                doubled_mask = loss_mask.repeat(2).reshape(2,-1)
+                #masked_ten = ten.masked_fill(~doubled_mask,0.)
+                #masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.).reshape(-1,1)
+            #else:    
+            #    masked_ten = ten.masked_fill(~loss_mask,0.)
+            #    masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.)
 
             #print(loss_mask.sum())
-            loss = model.loss(masked_ten, masked_bt)
+            #loss = model.loss(masked_ten, masked_bt)
             #loss = model.loss(ten, torch.hstack(bt).flatten())
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-            optimizer.step()
     
             if model.beta:
                 loss = model.loss(ten[doubled_mask], torch.hstack(bt).flatten()[loss_mask].reshape(-1,1))
             else:    
-                loss = model.loss(ten[loss_mask], torch.hstack(bt).flatten()[loss_mask])
+                loss = model.loss(ten.flatten()[loss_mask], torch.hstack(bt).flatten()[loss_mask])
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            optimizer.step()
+
             epoch_loss += loss.detach().item()
     
             nb_data += batch_targets.size(0)
@@ -274,12 +284,15 @@ class EncoderDecoderTrainer:
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
                     
-                    if t > 0:
-                        batch_e = torch.hstack([batch_scores, batch_e])
-                        batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                    if model.is_recurrent:
+                        if t > 0:
+                            batch_e = torch.hstack([batch_scores, batch_e])
+                            batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                        else:
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
                     else:
-                        batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                        batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
+                        batch_x = batch_x_   
                     
                     batch_targets_n = batch_targets_n_[t]
                     batch_targets_n = batch_targets_n.to(device)
@@ -317,7 +330,7 @@ class EncoderDecoderTrainer:
                 ten = torch.nan_to_num(torch.hstack(batch_res).real,nan=0., posinf=1 - model.eps,neginf=model.eps)
                 if model.fft:
                     if model.beta:
-                        ten = torch.vstack(model.MLP_layer.tn(ten[0]),ten[1])
+                        ten = torch.vstack([model.MLP_layer.tn(ten[0]),ten[1]])
                     else:    
                         ten = model.MLP_layer.tn(ten)             
                 #print(ten[ten<0],ten[ten == 0],ten[ten>1],ten[ten==1],torch.isnan(ten).any(),torch.isinf(ten).any())
@@ -325,7 +338,7 @@ class EncoderDecoderTrainer:
                 
                 doubled_mask = None
                 if model.beta:
-                    doubled_mask = loss_mask.repeat(2)
+                    doubled_mask = loss_mask.repeat(2).reshape(2,-1)
                     masked_ten = ten.masked_fill(~doubled_mask,0.)
                     masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.).reshape(-1,1)
                 else:    
@@ -333,12 +346,12 @@ class EncoderDecoderTrainer:
                     masked_bt = torch.hstack(bt).flatten().masked_fill(~loss_mask,0.)
     
                 #print(loss_mask.sum())
-                loss = model.loss(masked_ten, masked_bt)
+                #loss = model.loss(masked_ten, masked_bt)
                 #loss = model.loss(ten, torch.hstack(bt).flatten())
                 if model.beta:
                     loss = model.loss(ten[doubled_mask], torch.hstack(bt).flatten()[loss_mask].reshape(-1,1))
                 else:    
-                    loss = model.loss(ten[loss_mask], torch.hstack(bt).flatten()[loss_mask])          
+                    loss = model.loss(ten.flatten()[loss_mask], torch.hstack(bt).flatten()[loss_mask])          
                 epoch_test_loss += loss.detach().item()
                 nb_data += batch_targets.size(0)
             epoch_test_loss /= (iter + 1)
@@ -368,12 +381,15 @@ class EncoderDecoderTrainer:
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
                     
-                    if t > 0:
-                        batch_e = torch.hstack([batch_scores, batch_e])
-                        batch_x = torch.hstack([batch_vert_scores, batch_x_])
+                    if model.is_recurrent:
+                        if t > 0:
+                            batch_e = torch.hstack([batch_scores, batch_e])
+                            batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
+                        else:
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
                     else:
-                        batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                        batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
+                        batch_x = batch_x_   
     
                     batch_targets_n = batch_targets_n_[t]
                     batch_targets_n = batch_targets_n.to(device)
@@ -411,10 +427,10 @@ class EncoderDecoderTrainer:
                     
                     if model.fft:
                         if model.beta:
-                            batch_res_ = torch.vstack(model.MLP_layer.tn(batch_res_[0]),batch_res_[1])
+                            batch_res_ = torch.vstack([model.MLP_layer.tn(batch_res_[0]),batch_res_[1]])
                         else:    
                             batch_res_ = model.MLP_layer.tn(batch_res_)
-                        
+
                     labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
                     batch_res.append(batch_res_[0].flatten())
                     batch_tar.append(batch_targets.flatten())    
@@ -422,14 +438,19 @@ class EncoderDecoderTrainer:
         loss_mask = torch.hstack(loss_mask)
         if loss_mask.sum() > 0:
             ynn_test = torch.hstack(batch_tar).detach()[loss_mask].cpu().numpy()
-            y_pred = torch.hstack(batch_res).detach()[loss_mask].cpu().real.numpy()
+            y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach()[loss_mask].cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
         else:
             ynn_test = torch.hstack(batch_tar).detach().cpu().numpy()
-            y_pred = torch.hstack(batch_res).detach().cpu().real.numpy()
+            y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach().cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
     
         #print(ynn_test[:30], y_pred[:30])
-        mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
-        mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+        if model.scaled:
+            mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+        else:
+            mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+            mae_score = mean_absolute_error(ynn_test.flatten()* 100000,y_pred.flatten() * 100000)
+
         r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
         return mse_score,mae_score,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
 

@@ -2,9 +2,6 @@
 __pycache__/
 *.py[codz]
 *$py.class
-*.pkl
-trade*.csv
-fao*.csv
 
 # C extensions
 *.so
