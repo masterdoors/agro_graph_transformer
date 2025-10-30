@@ -52,11 +52,12 @@ class TransformerFitter:
         ckpt_dir = os.path.join(self.root_ckpt_dir, "RUN_")
         self.model.load_state_dict(torch.load('{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_), weights_only=True))
         
+        self.model.to(self.device)
         optimizer = optim.Adam(self.model.parameters(), lr=0.01, weight_decay=0.)
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                          factor=0.5,
-                                                         patience=30,
-                                                         verbose=True)
+                                                         patience=30
+                                                         )
         
         train_loader = DataLoader(trainset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn)
         val_loader = DataLoader(valset, batch_size=self.batch_size, shuffle=False, collate_fn=collate_fn)
@@ -145,7 +146,6 @@ class MLPReadout(nn.Module):
                 return y
             else:    
                 return self.tn(y)
-
 
 class GraphTransformerNet(nn.Module):
     def __init__(self, net_params):
@@ -254,7 +254,7 @@ class GraphTransformerNet(nn.Module):
         loss = self._loss(scores,targets)
         #loss = nn.L1Loss()(scores, targets)
         return loss
-        
+
 class EncoderTrainer:
     def __init__(self,features_max):
         self.features_max = features_max
@@ -575,7 +575,6 @@ def wl_positional_encoding(g):
     g.ndata['wl_pos_enc'] = torch.LongTensor(list(node_color_dict.values()))
     return g
 
-
 class TradeDGL(torch.utils.data.Dataset):
     def __init__(self, data,device,fft = False, random_ratio = None):
         self.data = data
@@ -655,6 +654,7 @@ class TradeDGL(torch.utils.data.Dataset):
                 
                 # Create the DGL Graph
                 g = dgl.DGLGraph()
+                g = g.to(device=self.device)
                 g.my_id = (y,c,t)
                 g.add_nodes(len(all_countries))
                 g.ndata['feat'] = node_features
@@ -666,6 +666,7 @@ class TradeDGL(torch.utils.data.Dataset):
                 
                 # Create the target DGL Graph
                 g = dgl.DGLGraph()
+                g = g.to(device=self.device)                
                 g.my_id = (y,c,t,"tar")
                 g.add_nodes(len(all_countries))
                 #g.ndata['feat'] = torch.zeros(prod.shape).to(device=self.device)
@@ -699,4 +700,3 @@ class TradeDGL(torch.utils.data.Dataset):
                 And its label.
         """
         return self.graph_lists[idx], self.graph_labels[idx]
-

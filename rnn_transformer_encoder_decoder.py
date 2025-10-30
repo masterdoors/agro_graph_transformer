@@ -576,6 +576,7 @@ class TradeDGLDecoder(TradeDGL):
                 
                 # Create the DGL Graph
                 g = dgl.DGLGraph()
+                g = g.to(device=self.device)
                 g.my_id = (y,c,t)
                 g.add_nodes(len(all_countries))
                 g.ndata['feat'] = node_features
@@ -587,6 +588,7 @@ class TradeDGLDecoder(TradeDGL):
                 
                 # Create the target DGL Graph
                 g = dgl.DGLGraph()
+                g = g.to(device=self.device)
                 g.my_id = (y,c,t,"tar")
                 g.add_nodes(len(all_countries))
                 #g.ndata['feat'] = torch.zeros(prod.shape).to(device=self.device)
@@ -603,6 +605,7 @@ class TradeDGLDecoder(TradeDGL):
 
                 #generate randomized output graph
                 g = dgl.DGLGraph()
+                g = g.to(device=self.device)
                 g.my_id = (y,c,t,"random_tar")
                 g.add_nodes(len(all_countries))
                 node_features = torch.from_numpy(random_prod).to(device=self.device)

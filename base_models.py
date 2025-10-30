@@ -11,6 +11,23 @@ import uuid
 import os
 import torch.nn.functional as F
 
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = float('inf')
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
+
 class RNNModel(nn.Module):
     def __init__(self,rnn_layer, hidden_size,output_size, drop = 0., scaled = True, beta = False,dtype=torch.float64):
         super(RNNModel, self).__init__()
@@ -67,7 +84,7 @@ class TKANModel(RNNModel):
 
 def make_modelLSTM(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
     return LSTMModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
- 
+
 def make_GRU(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
     return GRUModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
 
@@ -75,7 +92,7 @@ def make_modelTKAN(input_shape, hidden_size, output_size, dropout, scaled = True
     return TKANModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
 
 class RNNFitter:
-    def __init__(self,model,batch_size,ep,loss_type, lr,device):
+    def __init__(self,model,batch_size,ep,loss_type, lr,device,early=True):
         self.model = model
         self.batch_size = batch_size
         self.ep = ep
@@ -86,16 +103,18 @@ class RNNFitter:
         os.makedirs(ckpt_dir, exist_ok=True)
         self.device = device
         self.lr = lr
+        self.early = early
         torch.save(self.model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_))        
 
     def predict(self,X):
         if isinstance(self.model,TKANModel):
             X = X.astype(np.float32)
-        return self.model(torch.from_numpy(X).to(self.device)).reshape(X.shape[0],X.shape[1],-1)[:,:,0].detach().numpy()
+        return self.model(torch.from_numpy(X).to(self.device)).reshape(X.shape[0],X.shape[1],-1)[:,:,0].detach().cpu().numpy()
 
     def fit(self,X,y):   
         ckpt_dir = os.path.join(self.root_ckpt_dir, "RUN_")
-        self.model.load_state_dict(torch.load('{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_), weights_only=True))        
+        self.model.load_state_dict(torch.load('{}.pkl'.format(ckpt_dir + "/epoch_" + self.id_), weights_only=True))    
+        self.model.to(self.device)
         if self.loss_type == 'beta':
             criterion = BetaDistributionLoss()
         elif self.loss_type == 'mae':         
@@ -107,14 +126,15 @@ class RNNFitter:
             X = X.astype(np.float32)
             y = y.astype(np.float32)            
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=0.01)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                         factor=0.1,
-                                                         patience=5,
-                                                         verbose=True)
+                                                         factor=0.5,
+                                                         patience=5
+                                                         )
         distr = None
         best_loss = 1e10
         best_model = copy.deepcopy(self.model)
+        early_stopper = EarlyStopper(patience=15, min_delta=0)
         for epoch in range(self.ep):
             eloss = 0.
             eacc = 0.
@@ -135,6 +155,8 @@ class RNNFitter:
             with torch.no_grad():
                 out = self.model(torch.from_numpy(X).to(self.device))
                 lss = criterion(out, torch.from_numpy(y).to(self.device).reshape(-1,1))
+                if early_stopper.early_stop(lss) and self.early:             
+                    break                
                 if lss < best_loss:
                     best_loss = lss
                     best_model = copy.deepcopy(self.model)
