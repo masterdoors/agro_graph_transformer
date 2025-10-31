@@ -82,8 +82,8 @@ class TKANModel(RNNModel):
             hidden_dim=hidden_size,
             return_sequences=True,
             bidirectional=False,
-            kan_type='fourier',
-            sub_kan_configs={'gridsize': 50, 'addbias': True})
+            kan_type='spline'
+            )
         super(TKANModel, self).__init__(tkan,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta, mse = mse,dtype=torch.float32)
 
 def make_modelLSTM(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False, mse = False):
