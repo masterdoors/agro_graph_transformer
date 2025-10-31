@@ -138,7 +138,7 @@ class RNNFitter:
         
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr) #,weight_decay=0.01)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                         factor=0.5,
+                                                         factor=0.1,
                                                          patience=5
                                                          )
         distr = None

@@ -109,7 +109,7 @@ class TransformerFitter:
 
 class MLPReadout(nn.Module):
 
-    def __init__(self, input_dim, output_dim, L=2, fft = False, scaled = True, beta = False): #L=nb_hidden_layers
+    def __init__(self, input_dim, output_dim, L=2, fft = False, scaled = True, beta = False,mse = False): #L=nb_hidden_layers
         super().__init__()
         list_FC_layers = [ nn.Linear( input_dim , input_dim , bias=True, dtype=torch.double) for l in range(L) ]
         list_FC_layers.append(nn.Linear( input_dim , output_dim , bias=True,dtype=torch.double ))
@@ -121,6 +121,7 @@ class MLPReadout(nn.Module):
             self.tn = nn.ReLU()
         self.fft = fft
         self.beta = beta
+        self.mse = mse
         if self.beta:
             self.rel = nn.ReLU()
             self.blayer = nn.Linear( output_dim , output_dim , bias=True,dtype=torch.double)
@@ -142,7 +143,7 @@ class MLPReadout(nn.Module):
             else:    
                 return torch.vstack([torch.clip(self.tn(y).reshape(1,-1),min=0.0000001,max=0.99999999),y2.reshape(1,-1)])            
         else:
-            if self.fft:
+            if self.fft or self.mse:
                 return y
             else:    
                 return self.tn(y)
@@ -208,7 +209,7 @@ class GraphTransformerNet(nn.Module):
         self.layers = nn.ModuleList([ GraphTransformerLayer(self.hidden_dim, self.hidden_dim, num_heads, dropout,
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(n_layers-1) ]) 
         self.layers.append(GraphTransformerLayer(self.hidden_dim, self.hidden_dim, num_heads, dropout, self.layer_norm, self.batch_norm, self.residual))
-        self.MLP_layer = MLPReadout(self.hidden_dim, 1,1,self.fft,scaled = self.scaled,beta = self.beta)
+        self.MLP_layer = MLPReadout(self.hidden_dim, 1,1,self.fft,scaled = self.scaled,beta = self.beta, mse=self.mse)
         self.eps = 1e-12
         
     def forward(self, g, h, e, h_lap_pos_enc=None, h_wl_pos_enc=None):

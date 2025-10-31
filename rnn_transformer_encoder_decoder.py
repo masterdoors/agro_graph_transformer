@@ -84,7 +84,7 @@ class GraphTransformerNetDec(nn.Module):
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(n_enc_layers) ]) 
         self.dec_layers = nn.ModuleList([DecoderBlock(self.hidden_dim, self.hidden_dim, num_heads, dropout,
                                                     self.layer_norm, self.batch_norm, self.residual) for _ in range(n_dec_layers) ])
-        self.MLP_layer = MLPReadout(self.hidden_dim, 1,1,self.fft,scaled = self.scaled,beta = self.beta)
+        self.MLP_layer = MLPReadout(self.hidden_dim, 1,1,self.fft,scaled = self.scaled,beta = self.beta, mse = self.mse)
         self.eps = 1e-12
         
     def forward(self, g1, h1, e1, g2, h2, e2, mask, h_lap_pos_enc=None, h_wl_pos_enc=None):
