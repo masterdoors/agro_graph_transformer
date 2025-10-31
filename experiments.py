@@ -4,7 +4,9 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
 from sklearn.metrics import r2_score
 from sklearn.model_selection import train_test_split
-
+from sklearn.metrics import mean_absolute_percentage_error
+from scipy.special import logit
+from scipy.special import expit
 import optuna
 import os
 
@@ -112,6 +114,12 @@ def model_based_imputation(X_train, X_test, ynn_train, ynn_test, fitter, imp_tes
     X_train_imp = imp.fit_transform(X_train)
     X_test_imp = imp.fit_transform(X_test)
     ynn_train_imp = imp.fit_transform(ynn_train)
+
+    if fitter.loss_type == 'mse': #we test mse loss on logit
+        #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
+        #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
+        ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
+        ynn_test = logit(np.clip(ynn_test, a_min=0.0001, a_max=0.9999))        
     fitter.fit(X_train_imp,ynn_train_imp)
 
     ynn_train_imp[zero_idxs_train] = fitter.predict(X_train_imp)[zero_idxs_train]
@@ -173,7 +181,7 @@ if __name__ == "__main__":
             
             Xtr = np.vstack(datas).reshape(-1,5,4)
             ytr = np.vstack(targs)
-
+           
             targs = []
             datas = []            
 
@@ -185,22 +193,21 @@ if __name__ == "__main__":
             Xtest = np.vstack(datas).reshape(-1,5,4)
             ytest = np.vstack(targs)
             
-  
             models = {"LSTM":make_modelLSTM, "GRU": make_GRU, "TKAN": make_modelTKAN}
             #models = {"TKAN": make_modelTKAN}
 
             for model_name in models:
                 if is_normed:
-                    loss_types = ['beta','bce']
+                    loss_types = ['mse','bce']
                 else:
                     loss_types = ['mae']
 
                 for loss_type in loss_types:
                     make_model = models[model_name]
-                    batch_size = 64       
+                    batch_size = 64    
 
                     def objective(trial):
-                        lr = trial.suggest_float('lr', 0.00001, 0.01)
+                        lr = trial.suggest_float('lr', 0.0001, 0.1)
                         hidden_size = trial.suggest_int('hs', 2, 32)
 
                         if model_name == "TKAN":
@@ -220,7 +227,7 @@ if __name__ == "__main__":
                             else:
                                 outp_size = 1
 
-                            model = make_model(input_shape=Xtr.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
+                            model = make_model(input_shape=Xtr.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
                             model.to(device)
                             fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device) 
                             #impute data if necessary
@@ -231,6 +238,10 @@ if __name__ == "__main__":
 
                             if args.imputation == "NO_IMP":
                                     X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
+                            else:                        
+                                if loss_type == 'mse': #we test mse loss on logit
+                                    ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))  
+                                    ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))
 
                             fitter.fit(X_train_imp,ynn_train_imp)
 
@@ -244,16 +255,16 @@ if __name__ == "__main__":
                         return np.asarray(scores).mean() 
 
                     study = optuna.create_study(direction='minimize')
-                    study.optimize(objective, n_trials=50)    
+                    study.optimize(objective, n_trials=100)    
                     #study.optimize(objective, n_trials=5)
-                        
+
                     lr = study.best_trial.params["lr"]     
                     hs = study.best_trial.params["hs"]     
                     do = study.best_trial.params["dropout"]   
 
                     ep = 5
                     if model_name == "TKAN":
-                        ep = 50
+                        ep = 1000
                         #ep = 5 
                     else:    
                         ep = 1000
@@ -264,32 +275,46 @@ if __name__ == "__main__":
                     else:
                         outp_size = 1                                           
                     
-                        
                     for _ in range(5):
                         X_train, ynn_train = resample(Xtr, ytr, n_samples=int(Xtr.shape[0]*0.7), replace=False)
                         X_test, ynn_test = resample(Xtest, ytest, n_samples=int(Xtest.shape[0]*0.7), replace=False)                          
-                        model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'))
+                        model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
                         fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device,early=False)  
-                       
+
                         X_train_imp = X_train
                         X_test_imp = X_test
                         ynn_train_imp = ynn_train
                         if args.imputation == "NO_IMP":
                             X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
+                        else:                        
+                            if loss_type == 'mse': #we test mse loss on logit
+                                #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
+                                #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
+                                ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
                         
                         fitter.fit(X_train_imp,ynn_train_imp) 
                         try:
                             y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
-                            mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-                            mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                            if loss_type == 'mse':   
+                                y_pred = expit(y_pred)
+                            if is_normed:
+                                mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mape_score = mean_absolute_percentage_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * features_max[0],y_pred[ynn_test > 0.05].flatten() * features_max[0])
+                            else:
+                                mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mape_score = mean_absolute_percentage_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
+
                             r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-                            printf(model_name,mse_score, mae_score, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
+                            printf(model_name,mse_score, mae_score, mape_score, mape_score2, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
                             #nn_data.append([model_name,mse_score, mae_score])
                         except Exception as e:
                             print(e)
                         del model
-            
-            
+
             # Transformer regressor
             warnings.filterwarnings("ignore")
 
@@ -298,7 +323,7 @@ if __name__ == "__main__":
                     for attn_heads in [1,2,4]:
                         for is_recurrent in [True, False]:
                             if is_normed:
-                                loss_types = ['beta','bce']
+                                loss_types = ['mse','bce']
                             else:
                                 loss_types = ['mae']
                                 
@@ -390,8 +415,8 @@ if __name__ == "__main__":
                                     trainset, valset = torch.utils.data.random_split(dataset_train, [train_len, val_len])
                                     
                                     fitter.fit(trainset, valset,dataset_train_.collate)
-                                    sq,a,r,residuals,_ = fitter.predict(testset,dataset_test_.collate)
-                                    printf('Transformer: encoder',fft,sq,a,r, L, attn_heads,is_recurrent,args.imputation,is_normed,loss_type)
+                                    sq,a,ap,ap2, r,residuals,_ = fitter.predict(testset,dataset_test_.collate)
+                                    printf('Transformer: encoder',fft,sq,a,ap,ap2, r, L, attn_heads,is_recurrent,args.imputation,is_normed,loss_type)
 
             # Decoder
             for fft in [True, False]:
@@ -401,7 +426,7 @@ if __name__ == "__main__":
                             for mask_ratio in [0.1,0.3,0.5,0.7]:
                                 for is_recurrent in [True, False]:
                                     if is_normed:
-                                        loss_types = ['beta','bce']
+                                        loss_types = ['mse','bce']
                                     else:
                                         loss_types = ['mae']
                                         
@@ -490,8 +515,8 @@ if __name__ == "__main__":
                                             trainset, valset = torch.utils.data.random_split(dataset_train, [0.8,0.2])
                                             
                                             fitter.fit(trainset, valset,dataset_train_.collate)
-                                            sq,a,r,residuals,_ = fitter.predict(dataset_test,dataset_test_.collate)
-                                            printf('Transformer: encoder-decoder',fft,sq,a,r,encL, decL,attn_heads,mask_ratio,is_recurrent,args.imputation,is_normed,loss_type)
+                                            sq,a,ap,ap2, r,residuals,_ = fitter.predict(dataset_test,dataset_test_.collate)
+                                            printf('Transformer: encoder-decoder',fft,sq,a,ap,ap2, r,encL, decL,attn_heads,mask_ratio,is_recurrent,args.imputation,is_normed,loss_type)
     else:
         print("You should define imputation type via 'imputation' parameter")
 

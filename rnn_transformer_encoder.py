@@ -16,11 +16,11 @@ import torch.nn.functional as F
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.metrics import r2_score
 import scipy.sparse as sp
+from scipy.special import expit
 
-from torch.nn import BCELoss
-from torch.nn import L1Loss
 from pytorch_forecasting.metrics.distributions import BetaDistributionLoss
 import time
 import uuid
@@ -193,10 +193,14 @@ class GraphTransformerNet(nn.Module):
         
         self.in_feat_dropout = nn.Dropout(in_feat_dropout)
         self.beta = False
+        self.mse = False
         if net_params['loss'] == 'bce':
             self._loss = nn.BCELoss()
         elif net_params['loss'] == 'mae':
             self._loss = nn.L1Loss()
+        elif net_params['loss'] == 'mse':    
+            self._loss = nn.MSELoss()
+            self.mse = True
         else:
             self._loss = BetaDistributionLoss()
             self.beta = True
@@ -284,7 +288,17 @@ class EncoderTrainer:
                 batch_graphs = batch_graphs.to(device)
                 batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)  # num x feat
                 batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
-                
+
+                batch_targets = batch_targets.edata['feat'].reshape(1,-1)
+                #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
+                #batch_targets = torch.hstack([batch_targets,ez])
+                batch_targets = batch_targets.to(device)
+
+                if model.mse:
+                    #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                    #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                    batch_targets = torch.logit(batch_targets,eps = 0.0001)
+
                 if model.is_recurrent:
                     if t > 0:
                         batch_e = torch.hstack([batch_scores, batch_e])
@@ -295,10 +309,6 @@ class EncoderTrainer:
                 else:
                     batch_x = batch_x_               
                     
-                batch_targets = batch_targets.edata['feat'].reshape(1,-1)
-                #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
-                #batch_targets = torch.hstack([batch_targets,ez])
-                batch_targets = batch_targets.to(device)
                 bt.append(batch_targets)
                 bx = batch_x_[batch_graphs.edges("all")[0]]
                 #be.append(torch.hstack([batch_e, bx]))
@@ -361,6 +371,13 @@ class EncoderTrainer:
                     batch_graphs = batch_graphs.to(device)
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
+                    batch_targets = batch_targets.edata['feat'].reshape(1,-1)
+                    batch_targets = batch_targets.to(device)
+
+                    if model.mse:
+                        #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                        #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                        batch_targets = torch.logit(batch_targets,eps = 0.0001)                    
                     
                     if model.is_recurrent:
                         if t > 0:
@@ -372,10 +389,7 @@ class EncoderTrainer:
                     else:
                         batch_x = batch_x_                           
                      
-                    batch_targets = batch_targets.edata['feat'].reshape(1,-1)
-                    #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
-                    #batch_targets = torch.hstack([batch_targets,ez])
-                    batch_targets = batch_targets.to(device)
+
     
                     bt.append(batch_targets)
                     try:
@@ -431,6 +445,14 @@ class EncoderTrainer:
                     batch_graphs = batch_graphs.to(device)
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
+
+                    batch_targets = batch_targets.edata['feat'].reshape(1,-1)
+                    batch_targets = batch_targets.to(device)                    
+
+                    if model.mse:
+                        #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                        #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                        batch_targets = torch.logit(batch_targets,eps = 0.0001)                       
                     
                     if model.is_recurrent:
                         if t > 0:
@@ -442,11 +464,6 @@ class EncoderTrainer:
                     else:
                         batch_x = batch_x_   
                     
-                    batch_targets = batch_targets.edata['feat'].reshape(1,-1)
-                    #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
-                    #batch_targets = torch.hstack([batch_targets,ez])
-                    batch_targets = batch_targets.to(device)
-    
                     bt.append(batch_targets)
                     try:
                         batch_lap_pos_enc = batch_graphs.ndata['lap_pos_enc'].to(device)
@@ -473,27 +490,35 @@ class EncoderTrainer:
                         else:    
                             batch_res_ = model.MLP_layer.tn(batch_res_)    
 
-                    labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                    if not model.mse:
+                        labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                    else:    
+                        labeled_pred.append([t,[(i,j,expit(batch_res_[0,k])) for k,(i,j) in enumerate(zip(invals,outvals))]])
+
                     batch_res.append(batch_res_[0])
                     batch_tar.append(batch_targets.flatten())    
                     
         ynn_test = torch.hstack(batch_tar).detach().cpu().numpy()
         y_pred = torch.hstack(batch_res).detach().cpu().real
         
-
-
         y_pred = torch.nan_to_num(y_pred,nan=0.,posinf=0.,neginf=0.).numpy()
-    
+        if model.mse:    
+            ynn_test = expit(ynn_test)
+            y_pred = expit(y_pred)
         #print(ynn_test[:30], y_pred[:30])
         if model.scaled:
             mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
             mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mape_score = mean_absolute_percentage_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * self.features_max[0],y_pred[ynn_test > 0.05].flatten() * self.features_max[0])
         else:
             mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
             mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+            mape_score = mean_absolute_percentage_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+            mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
 
         r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-        return mse_score,mae_score,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
+        return mse_score,mae_score,mape_score,mape_score2,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
 
 def laplacian_positional_encoding(g, pos_enc_dim):
     """

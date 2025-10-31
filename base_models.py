@@ -6,6 +6,8 @@ import numpy as np
 import copy
 from torch.nn import BCELoss
 from torch.nn import L1Loss
+from torch.nn import MSELoss
+from sklearn.metrics import r2_score
 from pytorch_forecasting.metrics.distributions import BetaDistributionLoss
 import uuid
 import os
@@ -29,7 +31,7 @@ class EarlyStopper:
         return False
 
 class RNNModel(nn.Module):
-    def __init__(self,rnn_layer, hidden_size,output_size, drop = 0., scaled = True, beta = False,dtype=torch.float64):
+    def __init__(self,rnn_layer, hidden_size,output_size, drop = 0., scaled = True, beta = False,mse = False,dtype=torch.float64):
         super(RNNModel, self).__init__()
 
         self.num_layers = 1
@@ -37,6 +39,7 @@ class RNNModel(nn.Module):
         self.fc1 = nn.Linear(hidden_size, output_size,dtype=dtype)
         self.beta = beta
         self.scaled = scaled
+        self.mse = mse
         if beta:
             self.fc2 = nn.Linear(hidden_size, output_size,dtype=dtype)
         self.drop = nn.Dropout(p=drop)
@@ -53,26 +56,27 @@ class RNNModel(nn.Module):
         out = torch.squeeze(out)
         out_ = out.reshape(out.shape[0]*out.shape[1], -1)
         out = self.fc1(out_)
-        if self.scaled:
+        if self.scaled and not self.mse:
             out = F.sigmoid(out)
         if self.beta:
-            out2 = F.relu(self.fc2(out_)) + 0.0001
+            out2 = F.relu(self.fc2(out_))
+            out2 = torch.clip(out2, min=0.0000001)
             return torch.hstack([out, out2])
         else:    
             return out
 
 class LSTMModel(RNNModel):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False, mse = False):
         lstm = torch.nn.LSTM(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64)
-        super(LSTMModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta)
+        super(LSTMModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta, mse = mse)
 
 class GRUModel(RNNModel):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False, mse = False):
         lstm = torch.nn.GRU(input_size, hidden_size, num_layers=1,batch_first=True,dtype=torch.float64)
-        super(GRUModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta)
+        super(GRUModel, self).__init__(lstm,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta, mse = mse)
 
 class TKANModel(RNNModel):
-    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False):
+    def __init__(self,input_size, hidden_size, output_size, drop = 0., scaled = True, beta = False, mse = False):
         tkan = tKANLSTM(
             input_dim=input_size,
             hidden_dim=hidden_size,
@@ -80,16 +84,16 @@ class TKANModel(RNNModel):
             bidirectional=False,
             kan_type='fourier',
             sub_kan_configs={'gridsize': 50, 'addbias': True})
-        super(TKANModel, self).__init__(tkan,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta,dtype=torch.float32)
+        super(TKANModel, self).__init__(tkan,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta, mse = mse,dtype=torch.float32)
 
-def make_modelLSTM(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
-    return LSTMModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
+def make_modelLSTM(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False, mse = False):
+    return LSTMModel(input_shape, hidden_size,output_size, dropout,scaled,beta, mse)
 
-def make_GRU(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
-    return GRUModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
+def make_GRU(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False, mse = False):
+    return GRUModel(input_shape, hidden_size,output_size, dropout,scaled,beta, mse)
 
-def make_modelTKAN(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False):
-    return TKANModel(input_shape, hidden_size,output_size, dropout,scaled,beta)
+def make_modelTKAN(input_shape, hidden_size, output_size, dropout, scaled = True, beta = False, mse = False):
+    return TKANModel(input_shape, hidden_size,output_size, dropout,scaled,beta, mse)
 
 class RNNFitter:
     def __init__(self,model,batch_size,ep,loss_type, lr,device,early=True):
@@ -109,7 +113,10 @@ class RNNFitter:
     def predict(self,X):
         if isinstance(self.model,TKANModel):
             X = X.astype(np.float32)
-        return self.model(torch.from_numpy(X).to(self.device)).reshape(X.shape[0],X.shape[1],-1)[:,:,0].detach().cpu().numpy()
+        res = self.model(torch.from_numpy(X).to(self.device))    
+        if self.loss_type == 'beta':
+            res = res[:,0]
+        return res.reshape(X.shape[0],X.shape[1]).detach().cpu().numpy()
 
     def fit(self,X,y):   
         ckpt_dir = os.path.join(self.root_ckpt_dir, "RUN_")
@@ -119,14 +126,17 @@ class RNNFitter:
             criterion = BetaDistributionLoss()
         elif self.loss_type == 'mae':         
             criterion = L1Loss()
+        elif self.loss_type == 'mse':    
+            criterion = MSELoss()
         else:    
             criterion = BCELoss()
 
+        val_criterion = L1Loss()
         if isinstance(self.model,TKANModel):
             X = X.astype(np.float32)
             y = y.astype(np.float32)            
         
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr) #,weight_decay=0.01)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                          factor=0.5,
                                                          patience=5
@@ -134,7 +144,7 @@ class RNNFitter:
         distr = None
         best_loss = 1e10
         best_model = copy.deepcopy(self.model)
-        early_stopper = EarlyStopper(patience=15, min_delta=0)
+        early_stopper = EarlyStopper(patience=15,min_delta=0.0001)
         for epoch in range(self.ep):
             eloss = 0.
             eacc = 0.
@@ -149,17 +159,24 @@ class RNNFitter:
                 eloss += loss.item()
                 optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+                if not self.loss_type == 'beta':
+                    nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 optimizer.step()
         
             with torch.no_grad():
                 out = self.model(torch.from_numpy(X).to(self.device))
-                lss = criterion(out, torch.from_numpy(y).to(self.device).reshape(-1,1))
+                lss_ = criterion(out, torch.from_numpy(y).to(self.device).reshape(-1,1))                
+                
+                if self.loss_type == 'beta':
+                    out = out[:,0]
+                
+                lss = val_criterion(out.reshape(-1,1),torch.from_numpy(y).to(self.device).reshape(-1,1))
+
                 if early_stopper.early_stop(lss) and self.early:             
                     break                
-                if lss < best_loss:
-                    best_loss = lss
+                if lss_ < best_loss:
+                    best_loss = lss_
                     best_model = copy.deepcopy(self.model)
-                scheduler.step(lss) 
+                scheduler.step(lss_) 
 
         self.model = best_model

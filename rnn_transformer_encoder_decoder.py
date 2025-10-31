@@ -68,10 +68,14 @@ class GraphTransformerNetDec(nn.Module):
         
         self.in_feat_dropout = nn.Dropout(in_feat_dropout)
         self.beta = False
+        self.mse = False
         if net_params['loss'] == 'bce':
             self._loss = nn.BCELoss()
         elif net_params['loss'] == 'mae':
             self._loss = nn.L1Loss()
+        elif net_params['loss'] == 'mse':    
+            self._loss = nn.MSELoss()
+            self.mse = True
         else:
             self._loss = BetaDistributionLoss()
             self.beta = True
@@ -176,11 +180,24 @@ class EncoderDecoderTrainer:
             optimizer.zero_grad()        
             for t in range(len(batch_targets_)):
                 batch_graphs = batch_graphs_[t]
-    
                 batch_targets = batch_targets_[t]
+                batch_targets = batch_targets.edata['feat'].reshape(1,-1)
+                batch_targets = batch_targets.to(device)
+
                 batch_graphs = batch_graphs.to(device)
                 batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)  # num x feat
                 batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
+                batch_targets_n = batch_targets_n_[t]
+                batch_targets_n = batch_targets_n.to(device)
+                batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
+                batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)  
+
+                if model.mse:
+                    #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                    #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                    batch_targets = torch.logit(batch_targets,eps = 0.0001)                 
+                    #batch_tx = torch.logit(batch_tx,eps = 0.0001)   
+                    #batch_te = torch.logit(batch_te,eps = 0.0001) 
 
                 if model.is_recurrent:
                     if t > 0:
@@ -192,15 +209,8 @@ class EncoderDecoderTrainer:
                 else:
                     batch_x = batch_x_                
                     
-                batch_targets_n = batch_targets_n_[t]
-                batch_targets_n = batch_targets_n.to(device)
-                batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
-                batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)  
                 masked_edges = batch_targets_n.edata['mask'].flatten().to(device)  
                 
-                batch_targets = batch_targets.edata['feat'].reshape(1,-1)
-
-                batch_targets = batch_targets.to(device)
                 bt.append(batch_targets)
                 bx = batch_x_[batch_graphs.edges("all")[0]]
                 #be.append(torch.hstack([batch_e, bx]))
@@ -283,6 +293,17 @@ class EncoderDecoderTrainer:
                     batch_graphs = batch_graphs.to(device)
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
+                    batch_targets_n = batch_targets_n_[t]
+                    batch_targets_n = batch_targets_n.to(device)
+                    batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
+                    batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)                        
+
+                    if model.mse:
+                        #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                        #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                        batch_targets = torch.logit(batch_targets,eps = 0.0001)                 
+                        #batch_tx = torch.logit(batch_tx,eps = 0.0001)   
+                        #batch_te = torch.logit(batch_te,eps = 0.0001)                     
                     
                     if model.is_recurrent:
                         if t > 0:
@@ -294,13 +315,7 @@ class EncoderDecoderTrainer:
                     else:
                         batch_x = batch_x_   
                     
-                    batch_targets_n = batch_targets_n_[t]
-                    batch_targets_n = batch_targets_n.to(device)
-                    batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
-                    batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)    
                     masked_edges = batch_targets_n.edata['mask'].flatten().to(device) 
-                     
-                    
                     batch_targets = batch_targets.edata['feat'].reshape(1,-1)
                     #ez = torch.zeros((1,model.num_states*model.num_states - batch_targets.shape[1]))
                     #batch_targets = torch.hstack([batch_targets,ez])
@@ -380,6 +395,17 @@ class EncoderDecoderTrainer:
                     batch_graphs = batch_graphs.to(device)
                     batch_x_ = batch_graphs.ndata['feat'].reshape(-1,1).to(device)
                     batch_e = batch_graphs.edata['feat'].reshape(-1,2).to(device)
+                    batch_targets_n = batch_targets_n_[t]
+                    batch_targets_n = batch_targets_n.to(device)
+                    batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
+                    batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)    
+
+                    if model.mse:
+                        #batch_x_ = torch.logit(batch_x_,eps = 0.0001)   
+                        #batch_e = torch.logit(batch_e,eps = 0.0001) 
+                        batch_targets = torch.logit(batch_targets,eps = 0.0001)                 
+                        #batch_tx = torch.logit(batch_tx,eps = 0.0001)   
+                        #batch_te = torch.logit(batch_te,eps = 0.0001)                     
                     
                     if model.is_recurrent:
                         if t > 0:
@@ -391,10 +417,6 @@ class EncoderDecoderTrainer:
                     else:
                         batch_x = batch_x_   
     
-                    batch_targets_n = batch_targets_n_[t]
-                    batch_targets_n = batch_targets_n.to(device)
-                    batch_tx = batch_targets_n.ndata['feat'].reshape(-1,1).to(device)  # num x feat
-                    batch_te = batch_targets_n.edata['feat'].reshape(-1,1).to(device)    
                     masked_edges = batch_targets_n.edata['mask'].flatten().to(device)   
                  
                     batch_targets = batch_targets.edata['feat'].reshape(1,-1)
@@ -431,7 +453,10 @@ class EncoderDecoderTrainer:
                         else:    
                             batch_res_ = model.MLP_layer.tn(batch_res_)
 
-                    labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                    if not model.mse:
+                        labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                    else:    
+                        labeled_pred.append([t,[(i,j,expit(batch_res_[0,k])) for k,(i,j) in enumerate(zip(invals,outvals))]])
                     batch_res.append(batch_res_[0].flatten())
                     batch_tar.append(batch_targets.flatten())    
                     
@@ -440,19 +465,28 @@ class EncoderDecoderTrainer:
             ynn_test = torch.hstack(batch_tar).detach()[loss_mask].cpu().numpy()
             y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach()[loss_mask].cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
         else:
+
             ynn_test = torch.hstack(batch_tar).detach().cpu().numpy()
             y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach().cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
     
+        if model.mse:
+           ynn_test = expit(ynn_test)
+           y_pred = expit(y_pred)
+
         #print(ynn_test[:30], y_pred[:30])
         if model.scaled:
             mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
             mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mape_score = mean_absolute_percentage_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
+            mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * self.features_max[0],y_pred[ynn_test > 0.05].flatten() * self.features_max[0])
         else:
             mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
             mae_score = mean_absolute_error(ynn_test.flatten()* 100000,y_pred.flatten() * 100000)
+            mape_score = mean_absolute_percentage_error(ynn_test.flatten()* 100000,y_pred.flatten() * 100000) 
+            mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
 
         r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-        return mse_score,mae_score,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
+        return mse_score,mae_score,mape_score,mape_score2,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
 
 class TradeDGLDecoder(TradeDGL):
     def __init__(self, data,device, fft = False, random_ratio = 0.8):
