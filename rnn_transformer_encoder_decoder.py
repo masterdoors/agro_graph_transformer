@@ -239,8 +239,9 @@ class EncoderDecoderTrainer:
             if model.fft:
                 if model.beta:
                     ten = torch.vstack([model.MLP_layer.tn(ten[0]),ten[1]])
-                else:    
-                    ten = model.MLP_layer.tn(ten)
+                else:
+                    if not model.mse:      
+                        ten = model.MLP_layer.tn(ten)
             
             loss_mask = torch.hstack(loss_mask)     
             doubled_mask = None
@@ -346,8 +347,9 @@ class EncoderDecoderTrainer:
                 if model.fft:
                     if model.beta:
                         ten = torch.vstack([model.MLP_layer.tn(ten[0]),ten[1]])
-                    else:    
-                        ten = model.MLP_layer.tn(ten)             
+                    else:  
+                        if not model.mse:      
+                            ten = model.MLP_layer.tn(ten)             
                 #print(ten[ten<0],ten[ten == 0],ten[ten>1],ten[ten==1],torch.isnan(ten).any(),torch.isinf(ten).any())
                 loss_mask = torch.hstack(loss_mask)
                 
@@ -450,8 +452,9 @@ class EncoderDecoderTrainer:
                     if model.fft:
                         if model.beta:
                             batch_res_ = torch.vstack([model.MLP_layer.tn(batch_res_[0]),batch_res_[1]])
-                        else:    
-                            batch_res_ = model.MLP_layer.tn(batch_res_)
+                        else:
+                            if not model.mse:      
+                                batch_res_ = model.MLP_layer.tn(batch_res_)
 
                     if not model.mse:
                         labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])

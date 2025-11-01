@@ -338,8 +338,9 @@ class EncoderTrainer:
             if model.fft:
                 if model.beta:
                     ten = torch.vstack([torch.clip(model.MLP_layer.tn(ten[0]),min=0.0000001,max=0.9999999),ten[1]])
-                else:    
-                    ten = model.MLP_layer.tn(ten)
+                else:  
+                    if not model.mse:  
+                        ten = model.MLP_layer.tn(ten)
             
             if model.beta:
                 loss = model.loss(torch.t(ten), torch.hstack(bt).reshape(-1,1))
@@ -414,8 +415,9 @@ class EncoderTrainer:
                 if model.fft:
                     if model.beta:
                         ten = torch.vstack([torch.clip(model.MLP_layer.tn(ten[0]),min=0.0000001,max=0.999999999),ten[1]])
-                    else:    
-                        ten = model.MLP_layer.tn(ten)
+                    else:
+                        if not model.mse:  
+                           ten = model.MLP_layer.tn(ten)
                 
                 if model.beta:
                     loss = model.loss(torch.t(ten), torch.hstack(bt).reshape(-1,1))
@@ -488,8 +490,9 @@ class EncoderTrainer:
                     if model.fft:
                         if model.beta:
                             batch_res_ = model.MLP_layer.tn(batch_res_)
-                        else:    
-                            batch_res_ = model.MLP_layer.tn(batch_res_)    
+                        else:
+                            if not model.mse:      
+                                batch_res_ = model.MLP_layer.tn(batch_res_)    
 
                     if not model.mse:
                         labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
