@@ -200,13 +200,13 @@ if __name__ == "__main__":
             
             Xtest = np.vstack(datas).reshape(-1,5,4)
             ytest = np.vstack(targs)
-            
+      
             models = {"TKAN": make_modelTKAN, "LSTM":make_modelLSTM, "GRU": make_GRU}
             #models = {"TKAN": make_modelTKAN}
 
             for model_name in models:
                 if is_normed:
-                    loss_types = ['mse','bce']
+                    loss_types = ['bce','mse']
                 else:
                     loss_types = ['mae']
 
@@ -243,17 +243,14 @@ if __name__ == "__main__":
                             X_test_imp = Xtr[test_index]
                             ynn_train_imp = ytr[train_index]
                             ynn_test_imp =  ytr[test_index]
-
-                            if args.imputation == "NO_IMP":
-                                    X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
-                            else:                        
-                                if loss_type == 'mse': #we test mse loss on logit
-                                    ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))  
-                                    ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))
-
-                            fitter.fit(X_train_imp,ynn_train_imp)
-
                             try:
+                                if args.imputation == "NO_IMP":
+                                        X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
+                                else:                        
+                                    if loss_type == 'mse': #we test mse loss on logit
+                                        ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))  
+                                        ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))
+                                fitter.fit(X_train_imp,ynn_train_imp)
                                 y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
                                 scores.append(mean_squared_error(ynn_test_imp.flatten(),y_pred.flatten()))
                             except Exception as e:
@@ -292,16 +289,17 @@ if __name__ == "__main__":
                         X_train_imp = X_train
                         X_test_imp = X_test
                         ynn_train_imp = ynn_train
-                        if args.imputation == "NO_IMP":
-                            X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
-                        else:                        
-                            if loss_type == 'mse': #we test mse loss on logit
-                                #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
-                                #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
-                                ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
-                        
-                        fitter.fit(X_train_imp,ynn_train_imp) 
+
                         try:
+                            if args.imputation == "NO_IMP":
+                                X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
+                            else:                        
+                                if loss_type == 'mse': #we test mse loss on logit
+                                    #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
+                                    #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
+                                    ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
+                        
+                            fitter.fit(X_train_imp,ynn_train_imp) 
                             y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
                             if loss_type == 'mse':   
                                 y_pred = expit(y_pred)
