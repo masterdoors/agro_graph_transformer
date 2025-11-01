@@ -82,7 +82,8 @@ class TKANModel(RNNModel):
             hidden_dim=hidden_size,
             return_sequences=True,
             bidirectional=False,
-            kan_type='spline'
+            kan_type='chebyshev',
+            sub_kan_configs={'degree':5}
             )
         super(TKANModel, self).__init__(tkan,  hidden_size, output_size, drop = drop, scaled = scaled, beta = beta, mse = mse,dtype=torch.float32)
 

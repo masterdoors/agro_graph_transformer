@@ -109,8 +109,14 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
                         ds_test[(c,y)][1][i_,j_][1][t] = float(v)
 
 def model_based_imputation(X_train, X_test, ynn_train, ynn_test, fitter, imp_test = True):
+    X_train = np.nan_to_num(X_train, nan=0.)
+    ynn_train = np.nan_to_num(ynn_train, nan=0.)
+    X_test = np.nan_to_num(X_test, nan=0.)
+    ynn_test = np.nan_to_num(ynn_test, nan=0.)
+
     imp = Imputer(method="ffill", missing_values=0.)   
     zero_idxs_train =  ynn_train == 0
+
     X_train_imp = imp.fit_transform(X_train)
     X_test_imp = imp.fit_transform(X_test)
     ynn_train_imp = imp.fit_transform(ynn_train)
@@ -119,7 +125,6 @@ def model_based_imputation(X_train, X_test, ynn_train, ynn_test, fitter, imp_tes
         #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
         #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
         ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
-        ynn_test = logit(np.clip(ynn_test, a_min=0.0001, a_max=0.9999))        
     fitter.fit(X_train_imp,ynn_train_imp)
 
     ynn_train_imp[zero_idxs_train] = fitter.predict(X_train_imp)[zero_idxs_train]
@@ -129,6 +134,9 @@ def model_based_imputation(X_train, X_test, ynn_train, ynn_test, fitter, imp_tes
         zero_idxs_test = ynn_test == 0        
         ynn_test_imp =  imp.fit_transform(ynn_test)
         ynn_test_imp[zero_idxs_test] = fitter.predict(X_test_imp)[zero_idxs_test]
+        if fitter.loss_type == 'mse': #we test mse loss on logit
+            ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))    
+
         return X_train_imp, X_test_imp,ynn_train_imp, ynn_test_imp
 
 def genFFTfeatures(cluster_year_train_, cluster_year_test_):
@@ -193,7 +201,7 @@ if __name__ == "__main__":
             Xtest = np.vstack(datas).reshape(-1,5,4)
             ytest = np.vstack(targs)
             
-            models = {"LSTM":make_modelLSTM, "GRU": make_GRU, "TKAN": make_modelTKAN}
+            models = {"TKAN": make_modelTKAN, "LSTM":make_modelLSTM, "GRU": make_GRU}
             #models = {"TKAN": make_modelTKAN}
 
             for model_name in models:
