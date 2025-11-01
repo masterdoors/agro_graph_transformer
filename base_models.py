@@ -56,6 +56,7 @@ class RNNModel(nn.Module):
         out = torch.squeeze(out)
         out_ = out.reshape(out.shape[0]*out.shape[1], -1)
         out = self.fc1(out_)
+        out = torch.nan_to_num(out,nan=0.)
         if self.scaled and not self.mse:
             out = F.sigmoid(out)
         if self.beta:
