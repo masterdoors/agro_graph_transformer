@@ -179,147 +179,147 @@ if __name__ == "__main__":
             with open('name_encoder' + args.imputation + '.pkl', 'rb') as f:
                 le = pickle.load(f)
         
-            # targs = []
-            # datas = []
+            targs = []
+            datas = []
             
-            # for c, y in cluster_year_train:
-            #     for j,k in cluster_year_train[c,y][1]:
-            #         targs += [cluster_year_train[c,y][1][j,k][1]]
-            #         datas += [cluster_year_train[c,y][1][j,k][0]]
+            for c, y in cluster_year_train:
+                for j,k in cluster_year_train[c,y][1]:
+                    targs += [cluster_year_train[c,y][1][j,k][1]]
+                    datas += [cluster_year_train[c,y][1][j,k][0]]
             
-            # Xtr = np.vstack(datas).reshape(-1,5,4)
-            # ytr = np.vstack(targs)
+            Xtr = np.vstack(datas).reshape(-1,5,4)
+            ytr = np.vstack(targs)
            
-            # targs = []
-            # datas = []            
+            targs = []
+            datas = []            
 
-            # for c, y in cluster_year_test:
-            #     for j,k in cluster_year_test[c,y][1]:
-            #         targs += [cluster_year_test[c,y][1][j,k][1]]
-            #         datas += [cluster_year_test[c,y][1][j,k][0]]
+            for c, y in cluster_year_test:
+                for j,k in cluster_year_test[c,y][1]:
+                    targs += [cluster_year_test[c,y][1][j,k][1]]
+                    datas += [cluster_year_test[c,y][1][j,k][0]]
             
-            # Xtest = np.vstack(datas).reshape(-1,5,4)
-            # ytest = np.vstack(targs)
+            Xtest = np.vstack(datas).reshape(-1,5,4)
+            ytest = np.vstack(targs)
       
-            # models = {"TKAN": make_modelTKAN, "LSTM":make_modelLSTM, "GRU": make_GRU}
-            # #models = {"TKAN": make_modelTKAN}
+            models = {"TKAN": make_modelTKAN, "LSTM":make_modelLSTM, "GRU": make_GRU}
+            #models = {"TKAN": make_modelTKAN}
 
-            # for model_name in models:
-            #     if is_normed:
-            #         loss_types = ['bce','mse']
-            #     else:
-            #         loss_types = ['mae']
+            for model_name in models:
+                if is_normed:
+                    loss_types = ['bce','mse']
+                else:
+                    loss_types = ['mae']
 
-            #     for loss_type in loss_types:
-            #         make_model = models[model_name]
-            #         batch_size = 64    
+                for loss_type in loss_types:
+                    make_model = models[model_name]
+                    batch_size = 64    
 
-            #         def objective(trial):
-            #             lr = trial.suggest_float('lr', 0.0001, 0.1)
-            #             hidden_size = trial.suggest_int('hs', 2, 32)
+                    def objective(trial):
+                        lr = trial.suggest_float('lr', 0.0001, 0.1)
+                        hidden_size = trial.suggest_int('hs', 2, 32)
 
-            #             if model_name == "TKAN":
-            #                 do = trial.suggest_float('dropout', 0.05, 0.2)
-            #                 ep = 1000
-            #                 #ep = 5 
-            #             else:    
-            #                 do = trial.suggest_float('dropout', 0.05, 0.2)
-            #                 ep = 1000
-            #                 #ep = 5
+                        if model_name == "TKAN":
+                            do = trial.suggest_float('dropout', 0.05, 0.2)
+                            ep = 1000
+                            #ep = 5 
+                        else:    
+                            do = trial.suggest_float('dropout', 0.05, 0.2)
+                            ep = 1000
+                            #ep = 5
 
-            #             kf = KFold(n_splits=3)
-            #             scores = []
-            #             for _, (train_index, test_index) in enumerate(kf.split(Xtr)):
-            #                 if loss_type == "beta":
-            #                     outp_size = 2
-            #                 else:
-            #                     outp_size = 1
+                        kf = KFold(n_splits=3)
+                        scores = []
+                        for _, (train_index, test_index) in enumerate(kf.split(Xtr)):
+                            if loss_type == "beta":
+                                outp_size = 2
+                            else:
+                                outp_size = 1
 
-            #                 model = make_model(input_shape=Xtr.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
-            #                 model.to(device)
-            #                 fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device) 
-            #                 #impute data if necessary
-            #                 X_train_imp = Xtr[train_index]
-            #                 X_test_imp = Xtr[test_index]
-            #                 ynn_train_imp = ytr[train_index]
-            #                 ynn_test_imp =  ytr[test_index]
-            #                 try:
-            #                     if args.imputation == "NO_IMP":
-            #                             X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
-            #                     else:                        
-            #                         if loss_type == 'mse': #we test mse loss on logit
-            #                             ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))  
-            #                             ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))
-            #                     fitter.fit(X_train_imp,ynn_train_imp)
-            #                     y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
-            #                     scores.append(mean_squared_error(ynn_test_imp.flatten(),y_pred.flatten()))
-            #                 except Exception as e:
-            #                     print(e)
-            #                     scores.append(1e26)
-            #                 del model    
-            #             return np.asarray(scores).mean() 
+                            model = make_model(input_shape=Xtr.shape[2],hidden_size=hidden_size, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
+                            model.to(device)
+                            fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device) 
+                            #impute data if necessary
+                            X_train_imp = Xtr[train_index]
+                            X_test_imp = Xtr[test_index]
+                            ynn_train_imp = ytr[train_index]
+                            ynn_test_imp =  ytr[test_index]
+                            try:
+                                if args.imputation == "NO_IMP":
+                                        X_train_imp, X_test_imp, ynn_train_imp,ynn_test_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, ynn_test_imp, fitter, imp_test = True) 
+                                else:                        
+                                    if loss_type == 'mse': #we test mse loss on logit
+                                        ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))  
+                                        ynn_test_imp = logit(np.clip(ynn_test_imp, a_min=0.0001, a_max=0.9999))
+                                fitter.fit(X_train_imp,ynn_train_imp)
+                                y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
+                                scores.append(mean_squared_error(ynn_test_imp.flatten(),y_pred.flatten()))
+                            except Exception as e:
+                                print(e)
+                                scores.append(1e26)
+                            del model    
+                        return np.asarray(scores).mean() 
 
-            #         study = optuna.create_study(direction='minimize')
-            #         study.optimize(objective, n_trials=100)    
-            #         #study.optimize(objective, n_trials=5)
+                    study = optuna.create_study(direction='minimize')
+                    study.optimize(objective, n_trials=100)    
+                    #study.optimize(objective, n_trials=5)
 
-            #         lr = study.best_trial.params["lr"]     
-            #         hs = study.best_trial.params["hs"]     
-            #         do = study.best_trial.params["dropout"]   
+                    lr = study.best_trial.params["lr"]     
+                    hs = study.best_trial.params["hs"]     
+                    do = study.best_trial.params["dropout"]   
 
-            #         ep = 5
-            #         if model_name == "TKAN":
-            #             ep = 1000
-            #             #ep = 5 
-            #         else:    
-            #             ep = 1000
-            #             #ep = 5         
+                    ep = 5
+                    if model_name == "TKAN":
+                        ep = 1000
+                        #ep = 5 
+                    else:    
+                        ep = 1000
+                        #ep = 5         
 
-            #         if loss_type == "beta":
-            #             outp_size = 2
-            #         else:
-            #             outp_size = 1                                           
+                    if loss_type == "beta":
+                        outp_size = 2
+                    else:
+                        outp_size = 1                                           
                     
-            #         for _ in range(5):
-            #             X_train, ynn_train = resample(Xtr, ytr, n_samples=int(Xtr.shape[0]*0.7), replace=False)
-            #             X_test, ynn_test = resample(Xtest, ytest, n_samples=int(Xtest.shape[0]*0.7), replace=False)                          
-            #             model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
-            #             fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device,early=False)  
+                    for _ in range(5):
+                        X_train, ynn_train = resample(Xtr, ytr, n_samples=int(Xtr.shape[0]*0.7), replace=False)
+                        X_test, ynn_test = resample(Xtest, ytest, n_samples=int(Xtest.shape[0]*0.7), replace=False)                          
+                        model = make_model(input_shape=X_train.shape[2],hidden_size=hs, output_size = outp_size, dropout = do,scaled=is_normed,beta = (loss_type == 'beta'),mse=(loss_type == 'mse'))
+                        fitter = RNNFitter(model,batch_size,ep,loss_type,lr,device=device,early=False)  
 
-            #             X_train_imp = X_train
-            #             X_test_imp = X_test
-            #             ynn_train_imp = ynn_train
+                        X_train_imp = X_train
+                        X_test_imp = X_test
+                        ynn_train_imp = ynn_train
 
-            #             try:
-            #                 if args.imputation == "NO_IMP":
-            #                     X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
-            #                 else:                        
-            #                     if loss_type == 'mse': #we test mse loss on logit
-            #                         #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
-            #                         #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
-            #                         ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
+                        try:
+                            if args.imputation == "NO_IMP":
+                                X_train_imp, X_test_imp, ynn_train_imp = model_based_imputation(X_train_imp, X_test_imp, ynn_train_imp, None, fitter, imp_test = False) 
+                            else:                        
+                                if loss_type == 'mse': #we test mse loss on logit
+                                    #X_train_imp = logit(np.clip(X_train_imp, a_min=0.0001, a_max=0.9999))
+                                    #X_test_imp = logit(np.clip(X_test_imp, a_min=0.0001, a_max=0.9999))
+                                    ynn_train_imp = logit(np.clip(ynn_train_imp, a_min=0.0001, a_max=0.9999))     
                         
-            #                 fitter.fit(X_train_imp,ynn_train_imp) 
-            #                 y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
-            #                 if loss_type == 'mse':   
-            #                     y_pred = expit(y_pred)
-            #                 if is_normed:
-            #                     mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-            #                     mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-            #                     mape_score = mean_absolute_percentage_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
-            #                     mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * features_max[0],y_pred[ynn_test > 0.05].flatten() * features_max[0])
-            #                 else:
-            #                     mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
-            #                     mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
-            #                     mape_score = mean_absolute_percentage_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
-            #                     mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
+                            fitter.fit(X_train_imp,ynn_train_imp) 
+                            y_pred = fitter.predict(X_test_imp) #, batch_size=batch_size)
+                            if loss_type == 'mse':   
+                                y_pred = expit(y_pred)
+                            if is_normed:
+                                mse_score = mean_squared_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mae_score = mean_absolute_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mape_score = mean_absolute_percentage_error(ynn_test.flatten() * features_max[0],y_pred.flatten() * features_max[0])
+                                mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * features_max[0],y_pred[ynn_test > 0.05].flatten() * features_max[0])
+                            else:
+                                mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mape_score = mean_absolute_percentage_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
+                                mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
 
-            #                 r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
-            #                 printf(model_name,mse_score, mae_score, mape_score, mape_score2, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
-            #                 #nn_data.append([model_name,mse_score, mae_score])
-            #             except Exception as e:
-            #                 print(e)
-            #             del model
+                            r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
+                            printf(model_name,mse_score, mae_score, mape_score, mape_score2, r2_,args.imputation,is_normed,loss_type,fname="baseline_output.txt")     
+                            #nn_data.append([model_name,mse_score, mae_score])
+                        except Exception as e:
+                            print(e)
+                        del model
 
             # Transformer regressor
             warnings.filterwarnings("ignore")
