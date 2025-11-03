@@ -305,8 +305,8 @@ class EncoderTrainer:
                         batch_e = torch.hstack([batch_scores, batch_e])
                         batch_x = torch.hstack([batch_vert_scores, batch_x_])                
                     else:
-                        batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim)), batch_e])
-                        batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim)), batch_x_])         
+                        batch_e = torch.hstack([torch.randn((batch_e.shape[0],model.hidden_dim),device=model.device), batch_e])
+                        batch_x = torch.hstack([torch.randn((batch_x_.shape[0],model.hidden_dim),device=model.device), batch_x_])         
                 else:
                     batch_x = batch_x_               
                     
@@ -386,8 +386,8 @@ class EncoderTrainer:
                             batch_e = torch.hstack([batch_scores, batch_e])
                             batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
                         else:
-                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim),device=model.device), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim),device=model.device), batch_x_])
                     else:
                         batch_x = batch_x_                           
                      
@@ -462,8 +462,8 @@ class EncoderTrainer:
                             batch_e = torch.hstack([batch_scores, batch_e])
                             batch_x = torch.hstack([batch_vert_scores, batch_x_])                    
                         else:
-                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim)), batch_e])
-                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim)), batch_x_])
+                            batch_e = torch.hstack([torch.zeros((batch_e.shape[0],model.hidden_dim),device=model.device), batch_e])
+                            batch_x = torch.hstack([torch.zeros((batch_x_.shape[0],model.hidden_dim),device=model.device), batch_x_])
                     else:
                         batch_x = batch_x_   
                     
@@ -495,9 +495,9 @@ class EncoderTrainer:
                                 batch_res_ = model.MLP_layer.tn(batch_res_)    
 
                     if not model.mse:
-                        labeled_pred.append([t,[(i,j,batch_res_[0,k]) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                        labeled_pred.append([t,[(i,j,batch_res_[0,k].cpu()) for k,(i,j) in enumerate(zip(invals,outvals))]])
                     else:    
-                        labeled_pred.append([t,[(i,j,expit(batch_res_[0,k])) for k,(i,j) in enumerate(zip(invals,outvals))]])
+                        labeled_pred.append([t,[(i,j,expit(batch_res_[0,k].cpu())) for k,(i,j) in enumerate(zip(invals,outvals))]])
 
                     batch_res.append(batch_res_[0])
                     batch_tar.append(batch_targets.flatten())    
@@ -514,12 +514,18 @@ class EncoderTrainer:
             mse_score = mean_squared_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
             mae_score = mean_absolute_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
             mape_score = mean_absolute_percentage_error(ynn_test.flatten() * self.features_max[0],y_pred.flatten() * self.features_max[0])
-            mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * self.features_max[0],y_pred[ynn_test > 0.05].flatten() * self.features_max[0])
+            if (ynn_test > 0.05).sum() > 0:
+                mape_score2 = mean_absolute_percentage_error(ynn_test[ynn_test > 0.05].flatten() * self.features_max[0],y_pred[ynn_test > 0.05].flatten() * self.features_max[0])
+            else:
+                mape_score2 = 0.
         else:
             mse_score = mean_squared_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
             mae_score = mean_absolute_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
             mape_score = mean_absolute_percentage_error(ynn_test.flatten() * 100000,y_pred.flatten() * 100000)
-            mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
+            if (ynn_test > ynn_test.max() * 0.05).sum() > 0:
+                mape_score2= mean_absolute_percentage_error(ynn_test[ynn_test > ynn_test.max() * 0.05].flatten() * 100000,y_pred[ynn_test > ynn_test.max() * 0.05].flatten() * 100000)
+            else:
+                mape_score2=0.
 
         r2_ = r2_score(ynn_test.flatten(),y_pred.flatten())
         return mse_score,mae_score,mape_score,mape_score2,r2_,ynn_test.flatten() - y_pred.flatten(),labeled_pred 
@@ -597,8 +603,8 @@ class TradeDGL(torch.utils.data.Dataset):
         node_color_dict = {}
         node_neighbor_dict = {}
 
-        edge_list = torch.nonzero(g.adj().to_dense() != 0, as_tuple=False).numpy()
-        node_list = g.nodes().numpy()
+        edge_list = torch.nonzero(g.adj().to_dense() != 0, as_tuple=False).cpu().numpy()
+        node_list = g.nodes().cpu().numpy()
 
         # setting init
         for node in node_list:
