@@ -144,7 +144,7 @@ class RNNFitter:
                                                          patience=5
                                                          )
         distr = None
-        best_loss = 1e10
+        best_loss = 1e24
         best_model = copy.deepcopy(self.model)
         early_stopper = EarlyStopper(patience=15,min_delta=0.0001)
         for epoch in range(self.ep):

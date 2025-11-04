@@ -605,7 +605,10 @@ class TradeDGLDecoder(TradeDGL):
                             random_prod[j_] = prod[j_] 
                             random_prod[k_] = prod[k_]
                         else:    
-                            random_tar[j_,k_] = self.data[(c,y)][1][j,k][0][t,:1]
+                            if self.fft:
+                                random_tar[j_,k_] = self.data[(c,y)][2][j,k][0][t,:1]
+                            else:    
+                                random_tar[j_,k_] = self.data[(c,y)][1][j,k][0][t,:1]
                             random_mask[j_,k_] = True
                             random_prod[j_] = prod[j_]
                             random_prod[k_] = prod[k_]
