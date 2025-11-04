@@ -89,12 +89,12 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
             for i,j,v in vals:
                 i_ = dataset_small.le.inverse_transform([[int(i)]])[0]
                 j_ = dataset_small.le.inverse_transform([[int(j)]])[0]
-                if ds_train_[(c,y)][1][i_,j_][3][t]:
+                if ds_train_[(c,y)][1][i_,j_][-1][t]:
                     ds_train_[(c,y)][1][i_,j_][1][t] = float(v)
 
     for c,y in ds_train:
         for i,j in ds_train_[(c,y)][1]:
-            ds_train_[(c,y)][1][i,j] = ds_train_[(c,y)][1][i,j][:2]
+            ds_train_[(c,y)][1][i,j] = ds_train_[(c,y)][1][i,j][:-2]
     if imp_test:
         for c,y in ds_test:
             dataset_small = Dataset({(c,y):ds_test[c,y]},device,random_ratio=1.0) 
@@ -109,11 +109,11 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
                 for i,j,v in vals:
                     i_ = dataset_small.le.inverse_transform([[int(i)]])[0]
                     j_ = dataset_small.le.inverse_transform([[int(j)]])[0]
-                    if ds_test[(c,y)][1][i_,j_][3][t]:
+                    if ds_test[(c,y)][1][i_,j_][-1][t]:
                         ds_test[(c,y)][1][i_,j_][1][t] = float(v)
         for c,y in ds_test:
             for i,j in ds_test[(c,y)][1]:
-                ds_test[(c,y)][1][i,j] = ds_test[(c,y)][1][i,j][:2]
+                ds_test[(c,y)][1][i,j] = ds_test[(c,y)][1][i,j][:-2]
 
 def model_based_imputation(X_train, X_test, ynn_train, ynn_test, fitter, imp_test = True):
     X_train = np.nan_to_num(X_train, nan=0.)
