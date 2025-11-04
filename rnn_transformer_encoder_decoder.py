@@ -468,7 +468,6 @@ class EncoderDecoderTrainer:
             ynn_test = torch.hstack(batch_tar).detach()[loss_mask].cpu().numpy()
             y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach()[loss_mask].cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
         else:
-
             ynn_test = torch.hstack(batch_tar).detach().cpu().numpy()
             y_pred =  torch.nan_to_num(torch.hstack(batch_res).detach().cpu().real,nan=0.,posinf=0.,neginf=0.).numpy()
     

@@ -141,13 +141,13 @@ class EncoderDecoderAttentionLayer(nn.Module):
         self.h_attention = nn.MultiheadAttention(in_dim, num_heads,dtype=torch.double,bias=False) 
 
    def forward(self, dec_h, dec_e, enc_h,enc_e):
-       e,w = self.e_attention(dec_e,enc_e,enc_e)
+       e,_ = self.e_attention(dec_e,enc_e,enc_e,need_weights=False)
        # if not self.training:
        #     print("Encoder edges:")
        #     print(enc_e)
        #     print("Decoder edges:")
        #     print(dec_e)
-       h,w = self.h_attention(dec_h,enc_h,enc_h)
+       h,_ = self.h_attention(dec_h,enc_h,enc_h,need_weights=False)
        # if not self.training:
        #     print("Vert attention")
        #     print(w)
