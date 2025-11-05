@@ -591,6 +591,7 @@ class TradeDGLDecoder(TradeDGL):
                     prod[j_] = self.data[(c,y)][1][j,k][0][t,2]
                     prod[k_] = self.data[(c,y)][1][j,k][0][t,3]
                     tar[j_,k_] = self.data[(c,y)][1][j,k][1][t]    
+
                     if len(self.data[(c,y)]) > 2:
                         #use pre-defined values:
                         preprod_j = self.data[(c,y)][2][j,k][0][t,2]

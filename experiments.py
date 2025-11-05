@@ -152,6 +152,7 @@ def genFFTfeatures(cluster_year_train_, cluster_year_test_):
             f1 = torch.fft.rfft2(torch.from_numpy(cluster_year_train_[(c,y)][1][j,k][0][:,:2]),norm="ortho").double()
             f2 = torch.fft.rfft2(torch.from_numpy(cluster_year_train_[(c,y)][1][j,k][0][:,2:4]),norm="ortho").double()
             #print(f1.shape,f2.shape,cluster_year_[(c,y)][1][j,k][0].shape)
+            cluster_year_train_[(c,y)][1][j,k].append(cluster_year_train_[(c,y)][1][j,k][0])             
             cluster_year_train_[(c,y)][1][j,k][0] =  torch.hstack([f1,f2])
 
     for c,y in cluster_year_test_:
@@ -159,8 +160,9 @@ def genFFTfeatures(cluster_year_train_, cluster_year_test_):
             f1 = torch.fft.rfft2(torch.from_numpy(cluster_year_test_[(c,y)][1][j,k][0][:,:2]),norm="ortho").double()
             f2 = torch.fft.rfft2(torch.from_numpy(cluster_year_test_[(c,y)][1][j,k][0][:,2:4]),norm="ortho").double()
             #print(f1.shape,f2.shape,cluster_year_[(c,y)][1][j,k][0].shape)
+            cluster_year_test_[(c,y)][1][j,k].append(cluster_year_test_[(c,y)][1][j,k][0])            
             cluster_year_test_[(c,y)][1][j,k][0] =  torch.hstack([f1,f2])          
-            cluster_year_test_[(c,y)][1][j,k].append(cluster_year_test_[(c,y)][1][j,k][0])
+
 
 if __name__ == "__main__":
     warnings.warn = warn
@@ -465,7 +467,6 @@ if __name__ == "__main__":
 
                                         if fft:
                                             genFFTfeatures(cluster_year_train_,cluster_year_test_)                                
-                                    
                                         dataset_train_ = TradeDGLDecoder(cluster_year_train_,device,random_ratio = mask_ratio)
                                         dataset_test_ = TradeDGLDecoder(cluster_year_test_,device,random_ratio = 1.0)                                          
 
