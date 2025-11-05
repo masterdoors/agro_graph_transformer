@@ -57,8 +57,8 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
     ds_train_ = ds_train
     ds_test_ = ds_test
         
-    dataset_train_ = Dataset(ds_train_,device,fft=fitter.model.ftt,random_ratio = random_ratio) 
-    dataset_test_ = Dataset(ds_test_,device,fft=fitter.model.ftt,random_ratio = 1.0)
+    dataset_train_ = Dataset(ds_train_,device,fft=fitter.model.fft,random_ratio = random_ratio) 
+    dataset_test_ = Dataset(ds_test_,device,fft=fitter.model.fft,random_ratio = 1.0)
 
     train_len = int(dataset_train_.n_samples * 0.8)
     val_len = dataset_train_.n_samples - train_len
@@ -77,7 +77,7 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
 
     for c,y in ds_train_:
         #small_ds
-        dataset_small = Dataset({(c,y):ds_train_[c,y]},device,fft=fitter.model.ftt, random_ratio = random_ratio) 
+        dataset_small = Dataset({(c,y):ds_train_[c,y]},device,fft=fitter.model.fft, random_ratio = random_ratio) 
         
         if fitter.model.lap_pos_enc:
             dataset_small._add_laplacian_positional_encodings(net_params['pos_enc_dim'])
