@@ -57,8 +57,8 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
     ds_train_ = ds_train
     ds_test_ = ds_test
         
-    dataset_train_ = Dataset(ds_train_,device,random_ratio) 
-    dataset_test_ = Dataset(ds_test_,device,random_ratio = 1.0)
+    dataset_train_ = Dataset(ds_train_,device,fft=fitter.model.ftt,random_ratio = random_ratio) 
+    dataset_test_ = Dataset(ds_test_,device,fft=fitter.model.ftt,random_ratio = 1.0)
 
     train_len = int(dataset_train_.n_samples * 0.8)
     val_len = dataset_train_.n_samples - train_len
@@ -77,7 +77,7 @@ def model_based_imputation_ds(ds_train, ds_test, fitter,Dataset,device,imp_test 
 
     for c,y in ds_train_:
         #small_ds
-        dataset_small = Dataset({(c,y):ds_train_[c,y]},device,random_ratio) 
+        dataset_small = Dataset({(c,y):ds_train_[c,y]},device,fft=fitter.model.ftt, random_ratio = random_ratio) 
         
         if fitter.model.lap_pos_enc:
             dataset_small._add_laplacian_positional_encodings(net_params['pos_enc_dim'])
@@ -467,8 +467,8 @@ if __name__ == "__main__":
 
                                         if fft:
                                             genFFTfeatures(cluster_year_train_,cluster_year_test_)                                
-                                        dataset_train_ = TradeDGLDecoder(cluster_year_train_,device,random_ratio = mask_ratio)
-                                        dataset_test_ = TradeDGLDecoder(cluster_year_test_,device,random_ratio = 1.0)                                          
+                                        dataset_train_ = TradeDGLDecoder(cluster_year_train_, device, fft = fft, random_ratio = mask_ratio)
+                                        dataset_test_ = TradeDGLDecoder(cluster_year_test_, device,fft = fft,random_ratio = 1.0)                                          
 
                                         net_params = {}
                                         with open("decoder.json","r") as f:
@@ -499,8 +499,8 @@ if __name__ == "__main__":
                                         fitter = TransformerFitter(model, trainer, batch_size,epochs,device,root_ckpt_dir)       
                                         if args.imputation == "NO_IMP":
                                             model_based_imputation_ds(cluster_year_train_, cluster_year_test_, fitter,TradeDGLDecoder,device=device,imp_test = False,random_ratio = mask_ratio)                                    
-                                            dataset_train_ = TradeDGLDecoder(cluster_year_train_,device,random_ratio = mask_ratio)
-                                            dataset_test_ = TradeDGLDecoder(cluster_year_test_,device,random_ratio = 1.0)                                          
+                                            dataset_train_ = TradeDGLDecoder(cluster_year_train_,device,fft = fft,random_ratio = mask_ratio)
+                                            dataset_test_ = TradeDGLDecoder(cluster_year_test_,device,fft = fft,random_ratio = 1.0)                                          
     
                                         if lap_pos_enc:
                                             st = time.time()
